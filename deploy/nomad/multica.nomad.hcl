@@ -250,6 +250,9 @@ EOF
         env         = true
         data        = <<EOF
 HOSTNAME=0.0.0.0
+{{ range nomadService "multica-backend" -}}
+REMOTE_API_URL=http://{{ .Address }}:{{ .Port }}
+{{- end }}
 EOF
       }
 
