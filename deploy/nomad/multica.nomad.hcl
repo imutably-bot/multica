@@ -40,6 +40,11 @@ variable "jwt_secret" {
   default = "change-me-in-production"
 }
 
+variable "backend_host_ip" {
+  description = "Host IP where the backend is running (injected into the frontend container's /etc/hosts as 'backend')"
+  default     = "192.168.0.108"
+}
+
 variable "frontend_origin" {
   description = "Public URL of the frontend (used by backend for CORS / email links)"
   default     = "http://192.168.0.108:13000"
@@ -241,8 +246,11 @@ EOF
       driver = "docker"
 
       config {
-        image = "${var.registry}/multica-web:${var.image_tag}"
-        ports = ["http"]
+        image       = "${var.registry}/multica-web:${var.image_tag}"
+        ports       = ["http"]
+        # Map the "backend" hostname to the host IP so the baked-in
+        # REMOTE_API_URL=http://backend:8080 resolves inside the container.
+        extra_hosts = ["backend:${var.backend_host_ip}"]
       }
 
       template {
