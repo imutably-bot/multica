@@ -98,6 +98,106 @@ import {
   useAnimatedRightSidebarState,
 } from "../../layout/animated-right-sidebar";
 
+function ShellAgentPicker({
+  assigneeId,
+  agents,
+  timeline,
+  shellBasePath,
+}: {
+  assigneeId: string | null;
+  agents: { id: string; name: string; archived_at?: string | null }[];
+  timeline: TimelineEntry[];
+  shellBasePath: string;
+}) {
+  // Build ordered list: assignee first, then unique agents from timeline comments.
+  const agentOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const result: { id: string; name: string }[] = [];
+    const add = (id: string) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const match = agents.find((a) => a.id === id && !a.archived_at);
+      if (match) result.push({ id: match.id, name: match.name });
+    };
+    if (assigneeId) add(assigneeId);
+    for (const entry of timeline) {
+      if (entry.actor_type === "agent") add(entry.actor_id);
+    }
+    return result;
+  }, [assigneeId, agents, timeline]);
+
+  if (agentOptions.length === 0) {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <AppLink href={shellBasePath}>
+              <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+                <Terminal />
+              </Button>
+            </AppLink>
+          }
+        />
+        <TooltipContent side="bottom">Open shell</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (agentOptions.length === 1) {
+    const only = agentOptions[0]!;
+    const href = only.id === assigneeId
+      ? shellBasePath
+      : `${shellBasePath}?agentId=${encodeURIComponent(only.id)}`;
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <AppLink href={href}>
+              <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+                <Terminal />
+              </Button>
+            </AppLink>
+          }
+        />
+        <TooltipContent side="bottom">Open shell — {only.name}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+            <Terminal />
+          </Button>
+        }
+      />
+      <PopoverContent side="bottom" align="end" className="w-52 p-1">
+        <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Open shell as</div>
+        {agentOptions.map((agent) => {
+          const href = agent.id === assigneeId
+            ? shellBasePath
+            : `${shellBasePath}?agentId=${encodeURIComponent(agent.id)}`;
+          return (
+            <AppLink
+              key={agent.id}
+              href={href}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+            >
+              <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="truncate">{agent.name}</span>
+              {agent.id === assigneeId && (
+                <span className="ml-auto text-xs text-muted-foreground shrink-0">current</span>
+              )}
+            </AppLink>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function SubscriberPopoverContent({
   members,
   agents,
@@ -1865,18 +1965,12 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
               />
               <TooltipContent side="bottom">{actions.isPinned ? t(($) => $.detail.unpin_tooltip) : t(($) => $.detail.pin_tooltip)}</TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <AppLink href={`${paths.issueDetail(issue.id)}/shell`}>
-                    <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
-                      <Terminal />
-                    </Button>
-                  </AppLink>
-                }
-              />
-              <TooltipContent side="bottom">Open shell</TooltipContent>
-            </Tooltip>
+            <ShellAgentPicker
+              assigneeId={issue.assignee_type === "agent" ? issue.assignee_id : null}
+              agents={agents}
+              timeline={timeline}
+              shellBasePath={`${paths.issueDetail(issue.id)}/shell`}
+            />
             <IssueActionsDropdown
               issue={issue}
               align="end"

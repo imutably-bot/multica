@@ -1454,14 +1454,18 @@ export class ApiClient {
 
   async createIssueShellSession(
     issueId: string,
+    agentId?: string,
   ): Promise<{ session_id: string; state: string; work_dir?: string; error?: string }> {
-    return this.fetch(`/api/issues/${issueId}/shell/session`, { method: "POST" });
+    const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return this.fetch(`/api/issues/${issueId}/shell/session${qs}`, { method: "POST" });
   }
 
   async getIssueShellSession(
     issueId: string,
+    agentId?: string,
   ): Promise<{ session_id: string; state: string; work_dir?: string; error?: string }> {
-    return this.fetch(`/api/issues/${issueId}/shell/session`);
+    const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return this.fetch(`/api/issues/${issueId}/shell/session${qs}`);
   }
 
   async listTaskMessages(taskId: string): Promise<TaskMessagePayload[]> {

@@ -130,12 +130,22 @@ func (h *Handler) resolveIssueShellLaunch(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return service.IssueShellLaunch{}, service.IssueShellSnapshot{}, false
 	}
-	if !issue.AssigneeType.Valid || issue.AssigneeType.String != "agent" || !issue.AssigneeID.Valid {
+
+	// Caller may request a specific agent via ?agent_id=; fall back to the
+	// issue's current assignee when the param is absent.
+	var agentUUID = issue.AssigneeID
+	if agentIDParam := r.URL.Query().Get("agent_id"); agentIDParam != "" {
+		parsed, ok2 := parseUUIDOrBadRequest(w, agentIDParam, "agent_id")
+		if !ok2 {
+			return service.IssueShellLaunch{}, service.IssueShellSnapshot{}, false
+		}
+		agentUUID = parsed
+	} else if !issue.AssigneeType.Valid || issue.AssigneeType.String != "agent" || !issue.AssigneeID.Valid {
 		writeAgentUnavailable(w, "issue is not assigned to an agent")
 		return service.IssueShellLaunch{}, service.IssueShellSnapshot{}, false
 	}
 
-	agent, err := h.Queries.GetAgent(r.Context(), issue.AssigneeID)
+	agent, err := h.Queries.GetAgent(r.Context(), agentUUID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "agent not found")
 		return service.IssueShellLaunch{}, service.IssueShellSnapshot{}, false

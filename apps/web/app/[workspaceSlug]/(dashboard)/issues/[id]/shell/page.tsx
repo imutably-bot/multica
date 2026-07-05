@@ -5,6 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import Link from "next/link";
 import { use, useEffect, useRef, useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Loader2, RefreshCcw, Terminal } from "lucide-react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
@@ -59,6 +60,9 @@ function IssueShellPageInner({
   workspaceSlug: string;
 }) {
   const wsId = useWorkspaceId();
+  const searchParams = useSearchParams();
+  const agentId = searchParams.get("agentId") ?? undefined;
+
   const [session, setSession] = useState<ShellSession | null>(null);
   const [transportError, setTransportError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -70,7 +74,7 @@ function IssueShellPageInner({
 
   const { data: issue, isLoading: issueLoading } = useQuery(issueDetailOptions(wsId, issueId));
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
-  const activeAgent = agents.find((agent) => agent.id === (issue?.assignee_id ?? "")) ?? null;
+  const activeAgent = agents.find((a) => a.id === (agentId ?? issue?.assignee_id ?? "")) ?? null;
 
   useEffect(() => {
     sessionRef.current = session;
@@ -79,8 +83,9 @@ function IssueShellPageInner({
   function connectSocket(sessionId: string) {
     socketRef.current?.close();
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const agentParam = agentId ? `&agent_id=${encodeURIComponent(agentId)}` : "";
     const socket = new WebSocket(
-      `${protocol}://${window.location.host}/api/issues/${issueId}/shell/ws?workspace_slug=${encodeURIComponent(workspaceSlug)}`,
+      `${protocol}://${window.location.host}/api/issues/${issueId}/shell/ws?workspace_slug=${encodeURIComponent(workspaceSlug)}${agentParam}`,
     );
     socketRef.current = socket;
 
@@ -187,7 +192,7 @@ function IssueShellPageInner({
     let cancelled = false;
     startTransition(() => {
       void api
-        .createIssueShellSession(issueId)
+        .createIssueShellSession(issueId, agentId)
         .then((created) => {
           if (cancelled) return;
           setSession(created);
@@ -204,14 +209,14 @@ function IssueShellPageInner({
     return () => {
       cancelled = true;
     };
-  }, [issueId]);
+  }, [issueId, agentId]);
 
   const reconnectShell = () => {
     setTransportError(null);
     terminalRef.current?.clear();
     startTransition(() => {
       void api
-        .createIssueShellSession(issueId)
+        .createIssueShellSession(issueId, agentId)
         .then((created) => {
           setSession(created);
           connectSocket(created.session_id);
