@@ -21,6 +21,7 @@ import {
   PinOff,
   Plus,
   Tag,
+  Terminal,
   Unlink,
   Users,
 } from "lucide-react";
@@ -1863,6 +1864,18 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
                 }
               />
               <TooltipContent side="bottom">{actions.isPinned ? t(($) => $.detail.unpin_tooltip) : t(($) => $.detail.pin_tooltip)}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <AppLink href={`${paths.issueDetail(issue.id)}/shell`}>
+                    <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+                      <Terminal />
+                    </Button>
+                  </AppLink>
+                }
+              />
+              <TooltipContent side="bottom">Open shell</TooltipContent>
             </Tooltip>
             <IssueActionsDropdown
               issue={issue}
