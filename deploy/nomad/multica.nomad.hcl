@@ -21,7 +21,7 @@ variable "registry" {
 
 variable "image_tag" {
   description = "Tag for multica-backend and multica-web images"
-  default     = "codex-khi-159-issue-shell-prototype-e804be63"
+  default     = "codex-khi-159-issue-shell-prototype-578644b4"
 }
 
 variable "postgres_db" {
