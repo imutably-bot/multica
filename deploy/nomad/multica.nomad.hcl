@@ -16,7 +16,7 @@
 
 variable "registry" {
   description = "Docker image registry prefix"
-  default     = "docker-registry.imutably.com"
+  default     = "docker-registry.imutably.com/v2"
 }
 
 variable "image_tag" {
@@ -205,7 +205,7 @@ EOF
         check {
           name     = "backend-http"
           type     = "http"
-          path     = "/api/v1/health"
+          path     = "/health"
           port     = "http"
           interval = "15s"
           timeout  = "5s"
