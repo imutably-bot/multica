@@ -1452,6 +1452,18 @@ export class ApiClient {
     return this.fetch(`/api/issues/${issueId}/active-task`);
   }
 
+  async createIssueShellSession(
+    issueId: string,
+  ): Promise<{ session_id: string; state: string; work_dir?: string; error?: string }> {
+    return this.fetch(`/api/issues/${issueId}/shell/session`, { method: "POST" });
+  }
+
+  async getIssueShellSession(
+    issueId: string,
+  ): Promise<{ session_id: string; state: string; work_dir?: string; error?: string }> {
+    return this.fetch(`/api/issues/${issueId}/shell/session`);
+  }
+
   async listTaskMessages(taskId: string): Promise<TaskMessagePayload[]> {
     return this.fetch(`/api/tasks/${taskId}/messages`);
   }

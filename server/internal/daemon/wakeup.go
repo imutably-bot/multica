@@ -148,6 +148,7 @@ func (d *Daemon) runTaskWakeupConnection(ctx context.Context, runtimeIDs []strin
 	}
 	writes := make(chan []byte, writeBufSize)
 	writerDone := make(chan struct{})
+	d.setWSWrites(writes)
 	go d.runWSWriter(conn, writes, writerDone)
 
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
@@ -175,6 +176,7 @@ func (d *Daemon) runTaskWakeupConnection(ctx context.Context, runtimeIDs []strin
 	defer func() {
 		cancelHeartbeat()
 		<-hbDone
+		d.clearWSWrites(writes)
 		close(writes)
 		<-writerDone
 	}()
@@ -265,6 +267,35 @@ func marshalRaw(v any) json.RawMessage {
 	return data
 }
 
+func (d *Daemon) setWSWrites(writes chan []byte) {
+	d.wsWriteMu.Lock()
+	d.wsWrites = writes
+	d.wsWriteMu.Unlock()
+}
+
+func (d *Daemon) clearWSWrites(writes chan []byte) {
+	d.wsWriteMu.Lock()
+	if d.wsWrites == writes {
+		d.wsWrites = nil
+	}
+	d.wsWriteMu.Unlock()
+}
+
+func (d *Daemon) sendWSFrame(frame []byte) bool {
+	d.wsWriteMu.RLock()
+	writes := d.wsWrites
+	d.wsWriteMu.RUnlock()
+	if writes == nil {
+		return false
+	}
+	select {
+	case writes <- frame:
+		return true
+	default:
+		return false
+	}
+}
+
 // handleWSHeartbeatAck dispatches one heartbeat_ack received over the WS
 // task-wakeup connection. Extracted from readTaskWakeupMessages so tests can
 // exercise the branching logic without a real WebSocket.
@@ -335,6 +366,13 @@ func (d *Daemon) readTaskWakeupMessages(conn *websocket.Conn, taskWakeups chan<-
 				continue
 			}
 			d.handleWSHeartbeatAck(context.Background(), &ack)
+		case protocol.EventDaemonIssueShellOpen,
+			protocol.EventDaemonIssueShellInput,
+			protocol.EventDaemonIssueShellResize,
+			protocol.EventDaemonIssueShellClose:
+			if d.issueShells != nil {
+				d.issueShells.handleMessage(context.Background(), msg)
+			}
 		}
 	}
 }

@@ -178,6 +178,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		AttachmentFrameAncestors: origins,
 	}
 	h := handler.New(queries, pool, hub, bus, emailSvc, store, cfSigner, analyticsClient, signupConfig, daemonHub)
+	daemonHub.SetFrameHandler(h.IssueShellService.HandleDaemonFrame)
 	h.Metrics = opts.BusinessMetrics
 	h.FeatureFlags = opts.FeatureFlags
 	if opts.FeatureFlags != nil {
@@ -990,6 +991,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/subscribe", h.SubscribeToIssue)
 					r.Post("/unsubscribe", h.UnsubscribeFromIssue)
 					r.Get("/active-task", h.GetActiveTaskForIssue)
+					r.Post("/shell/session", h.CreateIssueShellSession)
+					r.Get("/shell/session", h.GetIssueShellSession)
+					r.Get("/shell/ws", h.IssueShellWebSocket)
 					r.Post("/tasks/{taskId}/cancel", h.CancelTask)
 					r.Post("/rerun", h.RerunIssue)
 					r.Get("/task-runs", h.ListTasksByIssue)
