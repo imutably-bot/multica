@@ -1,6 +1,6 @@
 "use client";
 
-import "xterm/css/xterm.css";
+import "@xterm/xterm/css/xterm.css";
 
 import Link from "next/link";
 import { use, useEffect, useRef, useState, useTransition } from "react";
