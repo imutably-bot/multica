@@ -132,7 +132,12 @@ function ShellAgentPicker({
         <TooltipTrigger
           render={
             <AppLink href={shellBasePath}>
-              <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
+                aria-label="Open shell"
+              >
                 <Terminal />
               </Button>
             </AppLink>
@@ -153,7 +158,12 @@ function ShellAgentPicker({
         <TooltipTrigger
           render={
             <AppLink href={href}>
-              <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
+                aria-label={`Open shell — ${only.name}`}
+              >
                 <Terminal />
               </Button>
             </AppLink>
@@ -168,7 +178,12 @@ function ShellAgentPicker({
     <Popover>
       <PopoverTrigger
         render={
-          <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
+            aria-label="Open shell as"
+          >
             <Terminal />
           </Button>
         }
