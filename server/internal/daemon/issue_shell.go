@@ -273,6 +273,17 @@ func buildInteractiveShellArgs(provider string, payload protocol.IssueShellOpenP
 		}
 		args = append(args, payload.CustomArgs...)
 		return args, nil
+	case "hermes":
+		// "chat" subcommand must come before all flags for interactive use.
+		hermesArgs := append([]string{"chat"}, args...)
+		if payload.Model != "" {
+			hermesArgs = append(hermesArgs, "--model", payload.Model)
+		}
+		if payload.PriorSessionID != "" {
+			hermesArgs = append(hermesArgs, "--resume", payload.PriorSessionID)
+		}
+		hermesArgs = append(hermesArgs, payload.CustomArgs...)
+		return hermesArgs, nil
 	default:
 		return nil, fmt.Errorf("provider %q does not support issue shell yet", provider)
 	}
