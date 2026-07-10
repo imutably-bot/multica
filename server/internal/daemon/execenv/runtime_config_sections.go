@@ -304,7 +304,8 @@ func writeAvailableCommandsQuickCreate(b *strings.Builder, templates map[string]
 func writeCommentFormatting(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Comment Formatting\n\n")
 	if runtimeGOOS == "windows" {
-		b.WriteString("On Windows, **always write the comment body to a UTF-8 file with your file-write tool first, then post it with `--content-file <path>`** — do NOT pipe via `--content-stdin` (PowerShell 5.1's `$OutputEncoding` defaults to ASCIIEncoding when piping to a native command, silently dropping non-ASCII characters as `?` before they reach `multica.exe`). Never use inline `--content` for agent-authored comments. Keep the same `--parent` value from the trigger comment when replying. Delete the temp file (`Remove-Item ./reply.md`) after posting; do not rely on `\\n` escapes.\n\n")
+		b.WriteString(runtimeTemplate(templates, prompttmpl.CommentFormatWinKey, nil))
+		b.WriteString("\n")
 		return
 	}
 	b.WriteString(runtimeTemplate(templates, prompttmpl.CommentFormatKey, nil))
@@ -348,22 +349,26 @@ func writeProjectContext(b *strings.Builder, ctx TaskContextForEnv) {
 	if desc := strings.TrimSpace(ctx.ProjectDescription); desc != "" {
 		projectDescriptionBlock = "Project description — durable context the project owner set for every task in this project:\n\n" + desc + "\n\n"
 	}
-	projectResourcesBlock := ""
+	projectResourcesIntroBlock := ""
+	projectResourcesListBlock := ""
+	projectResourcesOutroBlock := ""
 	if len(ctx.ProjectResources) > 0 {
-		var resources strings.Builder
-		resources.WriteString("Project resources (also written to `.multica/project/resources.json`):\n\n")
+		projectResourcesIntroBlock = "Project resources (also written to `.multica/project/resources.json`):\n\n"
+		var resourcesList strings.Builder
 		for _, r := range ctx.ProjectResources {
-			fmt.Fprintf(&resources, "- %s\n", formatProjectResource(r))
+			fmt.Fprintf(&resourcesList, "- %s\n", formatProjectResource(r))
 		}
-		resources.WriteString("\nResources are pointers — open them only when relevant to the task. For `github_repo` resources, use `multica repo checkout <url>` to fetch the code. Add `--ref <branch-or-sha>` when a task or handoff names an exact revision.\n\n")
-		projectResourcesBlock = resources.String()
+		projectResourcesListBlock = resourcesList.String()
+		projectResourcesOutroBlock = "\nResources are pointers — open them only when relevant to the task. For `github_repo` resources, use `multica repo checkout <url>` to fetch the code. Add `--ref <branch-or-sha>` when a task or handoff names an exact revision.\n\n"
 	} else {
-		projectResourcesBlock = "This project has no resources attached yet.\n\n"
+		projectResourcesIntroBlock = "This project has no resources attached yet.\n\n"
 	}
 	b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.ProjectContextKey, map[string]string{
-		"project_title_block":       projectTitleBlock,
-		"project_description_block": projectDescriptionBlock,
-		"project_resources_block":   projectResourcesBlock,
+		"project_title_block":           projectTitleBlock,
+		"project_description_block":     projectDescriptionBlock,
+		"project_resources_intro_block": projectResourcesIntroBlock,
+		"project_resources_list_block":  projectResourcesListBlock,
+		"project_resources_outro_block": projectResourcesOutroBlock,
 	}))
 	b.WriteString("\n")
 }
