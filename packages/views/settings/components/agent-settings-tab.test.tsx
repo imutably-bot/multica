@@ -7,6 +7,7 @@ import enCommon from "../../locales/en/common.json";
 import enSettings from "../../locales/en/settings.json";
 
 const mockUpdateWorkspace = vi.hoisted(() => vi.fn());
+const mockGetWorkspacePromptTemplates = vi.hoisted(() => vi.fn());
 const workspaceRef = vi.hoisted(() => ({
   current: {
     id: "workspace-1",
@@ -35,7 +36,10 @@ vi.mock("@multica/core/workspace/queries", () => ({
 }));
 
 vi.mock("@multica/core/api", () => ({
-  api: { updateWorkspace: mockUpdateWorkspace },
+  api: {
+    getWorkspacePromptTemplates: mockGetWorkspacePromptTemplates,
+    updateWorkspace: mockUpdateWorkspace,
+  },
 }));
 
 vi.mock("sonner", () => ({
@@ -73,13 +77,30 @@ describe("AgentSettingsTab", () => {
       ...workspaceRef.current,
       init_prompt: workspaceRef.current.init_prompt ?? "",
     });
+    mockGetWorkspacePromptTemplates.mockResolvedValue({
+      templates: [
+        {
+          key: "workspace_init",
+          title: "Workspace init prompt",
+          description: "Short prompt injected near the top of generated AGENTS.md / CLAUDE.md workdir guidance.",
+          supported_scopes: ["workspace", "agent"],
+          supported_variables: ["agent_name", "workspace_name", "task_type"],
+          default_template: "You are {{agent_name}}",
+          workspace_override: null,
+          base_template: "You are {{agent_name}}",
+          base_source: "default",
+          effective_template: "You are {{agent_name}}",
+          effective_source: "default",
+        },
+      ],
+    });
   });
 
-  it("loads the default prompt and shows the supported variables", () => {
+  it("loads the default prompt template and shows the supported variables", async () => {
     render(<AgentSettingsTab />, { wrapper: I18nWrapper });
 
-    const prompt = screen.getByLabelText("Init prompt") as HTMLTextAreaElement;
-    expect(prompt.value).toContain("You are {{agent_name}}");
+    const prompt = await screen.findByDisplayValue("You are {{agent_name}}");
+    expect(prompt).toBeTruthy();
     expect(screen.getByText("{{agent_name}}")).toBeTruthy();
     expect(screen.getByText("{{workspace_name}}")).toBeTruthy();
     expect(screen.getByText("{{task_type}}")).toBeTruthy();
@@ -89,17 +110,17 @@ describe("AgentSettingsTab", () => {
     const user = userEvent.setup();
     render(<AgentSettingsTab />, { wrapper: I18nWrapper });
 
-    const prompt = screen.getByLabelText("Init prompt") as HTMLTextAreaElement;
+    const prompt = (await screen.findByDisplayValue("You are {{agent_name}}")) as HTMLTextAreaElement;
     await user.clear(prompt);
     await user.type(prompt, "Custom prompt");
 
-    await user.click(screen.getByRole("button", { name: "Save prompt" }));
+    await user.click(screen.getByRole("button", { name: "Save prompts" }));
 
     await waitFor(() => {
       expect(mockUpdateWorkspace).toHaveBeenCalledTimes(1);
     });
     expect(mockUpdateWorkspace).toHaveBeenCalledWith("workspace-1", {
-      init_prompt: "Custom prompt",
+      settings: { prompt_templates: { workspace_init: "Custom prompt" } },
     });
   });
 });

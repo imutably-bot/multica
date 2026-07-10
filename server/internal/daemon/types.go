@@ -55,6 +55,9 @@ type Task struct {
 	IssueID       string `json:"issue_id"`
 	WorkspaceID   string `json:"workspace_id"`
 	WorkspaceName string `json:"workspace_name,omitempty"`
+	// PromptTemplates is the effective prompt-template map after applying the
+	// repo-code defaults, workspace overrides, and agent overrides.
+	PromptTemplates map[string]string `json:"prompt_templates,omitempty"`
 	// WorkspaceContext mirrors workspace.context (the per-workspace system
 	// prompt set in Settings → General). Server populates this on every claim
 	// regardless of task kind so the daemon can inject `## Workspace Context`

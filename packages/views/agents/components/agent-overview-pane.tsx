@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  Bot,
   Blocks,
   BookOpenText,
   FileText,
@@ -39,6 +40,7 @@ import { CustomArgsTab } from "./tabs/custom-args-tab";
 import { McpConfigTab } from "./tabs/mcp-config-tab";
 import { AgentMcpTab } from "./tabs/agent-mcp-tab";
 import { IntegrationsTab } from "./tabs/integrations-tab";
+import { PromptTemplatesTab } from "./tabs/prompt-templates-tab";
 import { RuntimeConfigTab } from "./tabs/runtime-config-tab";
 import { ActorIssuesPanel } from "../../common/actor-issues-panel";
 import { useT } from "../../i18n";
@@ -47,6 +49,7 @@ export type DetailTab =
   | "activity"
   | "tasks"
   | "instructions"
+  | "prompt_templates"
   | "skills"
   | "env"
   | "custom_args"
@@ -55,10 +58,11 @@ export type DetailTab =
   | "integrations"
   | "runtime_config";
 
-const TAB_LABEL_KEY: Record<DetailTab, "activity" | "tasks" | "instructions" | "skills" | "environment" | "custom_args" | "mcp_config" | "composio_mcp" | "integrations" | "runtime_config"> = {
+const TAB_LABEL_KEY: Record<DetailTab, "activity" | "tasks" | "instructions" | "prompt_templates" | "skills" | "environment" | "custom_args" | "mcp_config" | "composio_mcp" | "integrations" | "runtime_config"> = {
   activity: "activity",
   tasks: "tasks",
   instructions: "instructions",
+  prompt_templates: "prompt_templates",
   skills: "skills",
   env: "environment",
   custom_args: "custom_args",
@@ -75,6 +79,7 @@ const detailTabs: {
   { id: "activity", icon: Activity },
   { id: "tasks", icon: ListTodo },
   { id: "instructions", icon: FileText },
+  { id: "prompt_templates", icon: Bot },
   { id: "skills", icon: BookOpenText },
   { id: "env", icon: KeyRound },
   { id: "custom_args", icon: Terminal },
@@ -278,6 +283,14 @@ export function AgentOverviewPane({
               agent={agent}
               onSave={(instructions) => onUpdate(agent.id, { instructions })}
               onDirtyChange={setActiveDirty}
+            />
+          </TabContent>
+        )}
+        {effectiveTab === "prompt_templates" && (
+          <TabContent>
+            <PromptTemplatesTab
+              agent={agent}
+              onSave={(updates) => onUpdate(agent.id, updates)}
             />
           </TabContent>
         )}

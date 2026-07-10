@@ -1,6 +1,10 @@
 package execenv
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/multica-ai/multica/server/internal/prompttmpl"
+)
 
 // BuildNewCommentsHint returns the comment-reading pointer for the WARM path —
 // the agent ran on this issue before, so there is a since-anchor. The server
@@ -22,7 +26,7 @@ import "fmt"
 // there are no new comments (newCommentCount <= 0) or issueID is empty. In those
 // cases the caller falls back to BuildResumedCommentsHint (when a prior session
 // is active) or BuildColdCommentsHint.
-func BuildNewCommentsHint(issueID, triggerCommentID, triggerThreadID, newCommentsSince string, newCommentCount int) string {
+func BuildNewCommentsHint(templates map[string]string, issueID, triggerCommentID, triggerThreadID, newCommentsSince string, newCommentCount int) string {
 	if newCommentCount <= 0 || newCommentsSince == "" || issueID == "" {
 		return ""
 	}
@@ -31,24 +35,17 @@ func BuildNewCommentsHint(issueID, triggerCommentID, triggerThreadID, newComment
 	// first rather than blindly pulling every new comment issue-wide. The
 	// issue-wide --since catch-up is demoted to an only-if-needed fallback.
 	if threadID != "" {
-		return fmt.Sprintf(
-			"%d new comment(s) on this issue since your last run — don't read them all blindly. "+
-				"Start with the thread your triggering comment is in: "+
-				"`multica issue comment list %s --thread %s --since %s --output json` "+
-				"(swap `--since` for `--tail 30` if you need the full thread, not just the delta). "+
-				"Only if you need context from the other threads, catch up issue-wide: "+
-				"`multica issue comment list %s --since %s --output json`.\n\n",
-			newCommentCount, issueID, threadID, newCommentsSince, issueID, newCommentsSince,
-		)
+		return prompttmpl.Render(templateForPrompt(templates, prompttmpl.CommentNewHintKey), map[string]string{
+			"new_comment_count":  fmt.Sprintf("%d", newCommentCount),
+			"issue_id":           issueID,
+			"thread_id":          threadID,
+			"new_comments_since": newCommentsSince,
+		})
 	}
 	// Defensive: comment triggers always carry a trigger id, but if one is
 	// missing there is no thread to anchor on, so fall back to the plain
 	// issue-wide catch-up.
-	return fmt.Sprintf(
-		"%d new comment(s) on this issue since your last run. Catch up: "+
-			"`multica issue comment list %s --since %s --output json`.\n\n",
-		newCommentCount, issueID, newCommentsSince,
-	)
+	return fmt.Sprintf("%d new comment(s) on this issue since your last run. Catch up: `multica issue comment list %s --since %s --output json`.\n\n", newCommentCount, issueID, newCommentsSince)
 }
 
 // BuildResumedCommentsHint returns the comment-reading pointer for the WARM
@@ -59,20 +56,16 @@ func BuildNewCommentsHint(issueID, triggerCommentID, triggerThreadID, newComment
 // read bounded and conditional, but make it explicit that context-dependent
 // replies should refresh the triggering conversation rather than trusting
 // resumed memory alone.
-func BuildResumedCommentsHint(issueID, triggerCommentID, triggerThreadID string) string {
+func BuildResumedCommentsHint(templates map[string]string, issueID, triggerCommentID, triggerThreadID string) string {
 	threadID := activeThreadID(triggerThreadID, triggerCommentID)
 	if issueID == "" || threadID == "" {
 		return ""
 	}
-	return fmt.Sprintf(
-		"You're resuming the prior session, and the triggering comment is already included above. "+
-			"No other new comments on this issue since your last run. "+
-			"Use the active thread anchor `%s` and triggering comment ID `%s`. "+
-			"If your reply depends on thread context, do not rely only on resumed session memory — "+
-			"first pull the triggering conversation with: "+
-			"`multica issue comment list %s --thread %s --tail 30 --output json`.\n\n",
-		threadID, triggerCommentID, issueID, threadID,
-	)
+	return prompttmpl.Render(templateForPrompt(templates, prompttmpl.CommentResumedKey), map[string]string{
+		"thread_id":          threadID,
+		"trigger_comment_id": triggerCommentID,
+		"issue_id":           issueID,
+	})
 }
 
 // BuildColdCommentsHint returns the comment-reading pointer for the COLD path —
@@ -88,19 +81,15 @@ func BuildResumedCommentsHint(issueID, triggerCommentID, triggerThreadID string)
 // single-source rule as BuildNewCommentsHint, PR #2816). Returns "" when there
 // is no triggering comment to thread from, so the caller can keep a final plain
 // fallback.
-func BuildColdCommentsHint(issueID, triggerCommentID, triggerThreadID string) string {
+func BuildColdCommentsHint(templates map[string]string, issueID, triggerCommentID, triggerThreadID string) string {
 	threadID := activeThreadID(triggerThreadID, triggerCommentID)
 	if issueID == "" || threadID == "" {
 		return ""
 	}
-	return fmt.Sprintf(
-		"Read the triggering conversation first: "+
-			"`multica issue comment list %s --thread %s --tail 30 --output json` "+
-			"(that thread's root + its 30 newest replies). "+
-			"Need cross-thread background? `multica issue comment list %s --recent 10 --output json` "+
-			"(resolved threads come back folded — `--full` to expand).\n\n",
-		issueID, threadID, issueID,
-	)
+	return prompttmpl.Render(templateForPrompt(templates, prompttmpl.CommentColdKey), map[string]string{
+		"issue_id":  issueID,
+		"thread_id": threadID,
+	})
 }
 
 func activeThreadID(triggerThreadID, triggerCommentID string) string {
@@ -154,12 +143,12 @@ func activeThreadID(triggerThreadID, triggerCommentID string) string {
 //
 // provider is retained for caller symmetry and future per-provider tweaks; the
 // guardrail itself is intentionally identical across providers and hosts.
-func BuildCommentReplyInstructions(provider, issueID, triggerCommentID string) string {
+func BuildCommentReplyInstructions(provider string, templates map[string]string, issueID, triggerCommentID string) string {
 	if triggerCommentID == "" {
 		return ""
 	}
 	if useSlimBrief() {
-		return buildCommentReplyInstructionsSlim(provider, issueID, triggerCommentID)
+		return buildCommentReplyInstructionsSlim(provider, templates, issueID, triggerCommentID)
 	}
 	if runtimeGOOS == "windows" {
 		return fmt.Sprintf(
@@ -205,7 +194,6 @@ func BuildCommentReplyInstructions(provider, issueID, triggerCommentID string) s
 	)
 }
 
-
 // buildCommentReplyInstructionsSlim is the post-MUL-3560 compressed
 // reply-instructions block. Selected by BuildCommentReplyInstructions when
 // the `runtime_brief_slim` feature flag is on; the legacy verbose form
@@ -218,7 +206,7 @@ func BuildCommentReplyInstructions(provider, issueID, triggerCommentID string) s
 // canonical `## Comment Formatting` section the same brief carries, so
 // repeating it inline at every comment-triggered step 7 would be
 // duplication, not signal.
-func buildCommentReplyInstructionsSlim(provider, issueID, triggerCommentID string) string {
+func buildCommentReplyInstructionsSlim(provider string, templates map[string]string, issueID, triggerCommentID string) string {
 	if runtimeGOOS == "windows" {
 		return fmt.Sprintf(
 			"If you decide to reply, post it as a comment — always use the trigger comment ID below, "+
@@ -232,14 +220,17 @@ func buildCommentReplyInstructionsSlim(provider, issueID, triggerCommentID strin
 			issueID, triggerCommentID,
 		)
 	}
-	return fmt.Sprintf(
-		"If you decide to reply, post it as a comment — always use the trigger comment ID below, "+
-			"do NOT reuse --parent values from previous turns in this session.\n\n"+
-			"Write the reply body to a UTF-8 file with your file-write tool first, then post it with `--content-file` "+
-			"(see ## Comment Formatting above for why inline `--content` and `--content-stdin` HEREDOCs are unsafe — MUL-2904 / #4182):\n\n"+
-			"    multica issue comment add %s --parent %s --content-file ./reply.md\n"+
-			"    rm ./reply.md\n\n"+
-			"Do NOT write literal `\\n` escapes to simulate line breaks; the file preserves real newlines.\n",
-		issueID, triggerCommentID,
-	)
+	return prompttmpl.Render(templateForPrompt(templates, prompttmpl.CommentReplyKey), map[string]string{
+		"issue_id":           issueID,
+		"trigger_comment_id": triggerCommentID,
+	})
+}
+
+func templateForPrompt(templates map[string]string, key string) string {
+	if templates != nil {
+		if value, ok := templates[key]; ok {
+			return value
+		}
+	}
+	return prompttmpl.DefaultTemplate(key)
 }

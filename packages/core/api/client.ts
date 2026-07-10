@@ -132,6 +132,7 @@ import type {
   CreateBillingCheckoutSessionResponse,
   BillingCheckoutSessionStatus,
   CreateBillingPortalSessionResponse,
+  PromptTemplateListResponse,
 } from "../types";
 import type { OnboardingCompletionPath } from "../onboarding/types";
 import type { CreateFeedbackResponse, FeedbackKind } from "../feedback/types";
@@ -907,6 +908,10 @@ export class ApiClient {
     });
   }
 
+  async getAgentPromptTemplates(id: string): Promise<PromptTemplateListResponse> {
+    return this.fetch(`/api/agents/${id}/prompt-templates`);
+  }
+
   async archiveAgent(id: string): Promise<Agent> {
     return this.fetch(`/api/agents/${id}/archive`, { method: "POST" });
   }
@@ -1572,6 +1577,10 @@ export class ApiClient {
 
   async getWorkspace(id: string): Promise<Workspace> {
     return this.fetch(`/api/workspaces/${id}`);
+  }
+
+  async getWorkspacePromptTemplates(id: string): Promise<PromptTemplateListResponse> {
+    return this.fetch(`/api/workspaces/${id}/prompt-templates`);
   }
 
   async createWorkspace(data: { name: string; slug: string; description?: string; context?: string; init_prompt?: string }): Promise<Workspace> {
