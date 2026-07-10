@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@multica/core/api";
-import type { Agent, PromptTemplateDescriptor } from "@multica/core/types";
+import type { Agent, AgentRuntime, PromptTemplateDescriptor } from "@multica/core/types";
 import { toast } from "sonner";
 import { PromptTemplatesEditor } from "../../../common/prompt-templates-editor";
 
@@ -17,9 +17,11 @@ function mergeRuntimeConfig(
 
 export function PromptTemplatesTab({
   agent,
+  runtime,
   onSave,
 }: {
   agent: Agent;
+  runtime: AgentRuntime | null;
   onSave: (updates: { runtime_config: Record<string, unknown> }) => Promise<void>;
 }) {
   const [templates, setTemplates] = useState<PromptTemplateDescriptor[]>([]);
@@ -56,11 +58,23 @@ export function PromptTemplatesTab({
     return <p className="text-sm text-muted-foreground">Loading prompt templates…</p>;
   }
 
+  const provider = runtime?.provider ?? null;
+  const managedFile = provider === "claude" || provider === "codebuddy"
+    ? "CLAUDE.md"
+    : provider
+      ? "AGENTS.md"
+      : null;
+  const runtimeLabel = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : "selected runtime";
+  const targetNote = managedFile
+    ? `${runtimeLabel} writes the managed runtime prompt into ${managedFile}. These template overrides feed that generated file, while provider-specific sections such as skill loading and runtime instructions are still added by code for this vendor.`
+    : "These template overrides feed the managed runtime prompt for the selected runtime. Provider-specific sections such as skill loading and runtime instructions are still added by code.";
+
   return (
     <PromptTemplatesEditor
       templates={templates}
       mode="agent"
       intro="Override individual prompt steps for this agent. Leaving a prompt inherited keeps the workspace or code default in effect."
+      contextNote={targetNote}
       onSave={handleSave}
     />
   );

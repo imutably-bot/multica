@@ -42,11 +42,13 @@ export function PromptTemplatesEditor({
   mode,
   onSave,
   intro,
+  contextNote,
 }: {
   templates: PromptTemplateDescriptor[];
   mode: Mode;
   onSave: (overrides: Record<string, string>) => Promise<void>;
   intro?: string;
+  contextNote?: string;
 }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -73,6 +75,14 @@ export function PromptTemplatesEditor({
   return (
     <div className="space-y-4">
       {intro ? <p className="text-sm text-muted-foreground">{intro}</p> : null}
+      {contextNote ? (
+        <Card className="border-dashed">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-sm">Vendor-specific output</CardTitle>
+            <CardDescription>{contextNote}</CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs text-muted-foreground">
           Reset to the original code template, or keep an inherited value and only override the prompts that need to change.

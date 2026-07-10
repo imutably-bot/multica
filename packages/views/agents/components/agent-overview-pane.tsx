@@ -290,6 +290,7 @@ export function AgentOverviewPane({
           <TabContent>
             <PromptTemplatesTab
               agent={agent}
+              runtime={runtime}
               onSave={(updates) => onUpdate(agent.id, updates)}
             />
           </TabContent>
