@@ -8,6 +8,14 @@ import (
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
 )
 
+func runtimeTemplate(templates map[string]string, key string, values map[string]string) string {
+	template, ok := templates[key]
+	if !ok {
+		template = prompttmpl.DefaultTemplate(key)
+	}
+	return prompttmpl.Render(template, values)
+}
+
 // This file holds the slim runtime brief — the post-MUL-3560 path that
 // `buildMetaSkillContent` routes to when the `runtime_brief_slim` feature
 // flag is enabled. The legacy path lives untouched in runtime_config.go.
@@ -38,9 +46,9 @@ import (
 // `writeBackgroundTaskSafetySlim` below.
 
 // writeHeader emits the brief's leading title and one-line elevator pitch.
-func writeHeader(b *strings.Builder) {
-	b.WriteString("# Multica Agent Runtime\n\n")
-	b.WriteString("You are a coding agent in the Multica platform. Use the `multica` CLI to interact with the platform.\n\n")
+func writeHeader(b *strings.Builder, templates map[string]string) {
+	b.WriteString(runtimeTemplate(templates, prompttmpl.RuntimeHeaderKey, nil))
+	b.WriteString("\n")
 }
 
 // writeBackgroundTaskSafetySlim is the slim analogue of
@@ -49,12 +57,10 @@ func writeHeader(b *strings.Builder) {
 // assert): "Do NOT end your turn while background tasks",
 // "wait for a future notification/reminder", "run the work synchronously
 // instead".
-func writeBackgroundTaskSafetySlim(b *strings.Builder) {
+func writeBackgroundTaskSafetySlim(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Background Task Safety\n\n")
-	b.WriteString("Multica marks the task terminal when your top-level turn exits — any background work still running may be orphaned and its result lost.\n\n")
-	b.WriteString("- Do NOT end your turn while background tasks, async subagents, background shell commands, or detached tool calls are still running.\n")
-	b.WriteString("- If a tool response says to wait for a future notification/reminder, do not rely on that in Multica-managed runs — block on the appropriate wait / output / collect operation before exiting.\n")
-	b.WriteString("- If you can't observe a background task's result, run the work synchronously instead.\n\n")
+	b.WriteString(runtimeTemplate(templates, prompttmpl.BackgroundSafetyKey, nil))
+	b.WriteString("\n")
 }
 
 // writeAgentIdentity emits the Agent Identity heading and (optionally) the
@@ -255,46 +261,33 @@ func sanitizeBriefCodeToken(s string) string {
 // The fold-aware `--full` flag from MUL-3555 is documented inline on the
 // comment-list bullet so the slim brief preserves the same agent
 // behaviour as the legacy brief on that path.
-func writeAvailableCommands(b *strings.Builder) {
+func writeAvailableCommands(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Available Commands\n\n")
-	b.WriteString("Prefer `--output json` for structured data. The default brief lists only the core agent loop and common issue create/update tasks; for everything else run `multica --help` or `multica <command> --help`.\n\n")
-	b.WriteString("### Core\n")
-	b.WriteString("- `multica issue get <id> --output json` — full issue.\n")
-	b.WriteString("- `multica issue comment list <issue-id> [--thread <comment-id> [--tail N] | --recent N] [--before <ts> --before-id <uuid>] [--since <RFC3339>] [--full] --output json` — thread-aware comment reads. Resolved threads come back folded by default on complete-thread reads (default list, `--recent`, `--thread` without `--tail`); pass `--full` to expand. Page older replies / threads with `--before`/`--before-id` (stderr labels: `Next reply cursor`, `Next thread cursor`); `--help` for full semantics.\n")
-	b.WriteString("- `multica issue create --title \"...\" [--description-file <path>] [--priority X] [--status X] [--assignee X | --assignee-id <uuid>] [--parent <issue-id>] [--stage N] [--project <project-id>] [--due-date <RFC3339>] [--attachment <path>]` — create an issue. For agent-authored long descriptions prefer `--description-file <path>` (heredoc stdin can swallow trailing flags, #4182).\n")
-	b.WriteString("- `multica issue update <id> [--title X] [--description-file <path>] [--priority X] [--status X] [--assignee X] [--parent <issue-id>] [--stage N] [--project <project-id>] [--due-date <RFC3339>]` — update fields; pass `--parent \"\"` to clear parent.\n")
-	b.WriteString("- `multica issue status <id> <status>` — flip status (todo / in_progress / in_review / done / blocked / backlog / cancelled).\n")
-	b.WriteString("- `multica issue children <id> [--output json]` — list a parent's sub-issues grouped by stage.\n")
-	b.WriteString("- `multica issue comment add <issue-id> [--content \"...\" | --content-file <path> | --content-stdin] [--parent <comment-id>] [--attachment <path>]` — post a comment. Agent-authored bodies MUST use `--content-file`. `multica issue comment add --help` for full flags.\n")
-	b.WriteString("- `multica issue metadata list <issue-id> [--output json]` — list KV metadata.\n")
-	b.WriteString("- `multica issue metadata set <issue-id> --key <k> --value <v> [--type string|number|bool]` — pin or overwrite a key.\n")
-	b.WriteString("- `multica issue metadata delete <issue-id> --key <k>` — remove a key.\n")
-	b.WriteString("- `multica repo checkout <url> [--ref <branch-or-sha>]` — git worktree on a dedicated branch.\n\n")
-	b.WriteString("### Squad maintenance\n")
-	b.WriteString("- `multica squad member set-role <squad-id> --member-id <id> --member-type <agent|member> --role <role> [--output json]` — change role in place (use this instead of remove+add).\n\n")
+	b.WriteString(runtimeTemplate(templates, prompttmpl.AvailableCmdsKey, nil))
+	b.WriteString("\n")
 }
 
 // writeAvailableCommandsQuickCreate emits a minimal Available Commands
 // section for quick-create runs. Quick-create's hard guardrails forbid
 // every CLI other than `multica issue create`, so listing more would just
 // tempt the model to bend the guardrail.
-func writeAvailableCommandsQuickCreate(b *strings.Builder) {
+func writeAvailableCommandsQuickCreate(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Available Commands\n\n")
-	b.WriteString("**Use `--output json` for structured data.** For anything beyond `issue create`, run `multica --help` or `multica <command> --help`.\n\n")
-	b.WriteString("### Core\n")
-	b.WriteString("- `multica issue create --title \"...\" [--description \"...\" | --description-file <path> | --description-stdin] [--priority X] [--status X] [--assignee X | --assignee-id <uuid>] [--parent <issue-id>] [--stage N] [--project <project-id>] [--due-date <RFC3339>] [--attachment <path>]` — Create a new issue; `--attachment` may be repeated. For agent-authored long descriptions, prefer `--description-file <path>` over `--description-stdin` (flags after a HEREDOC terminator can be silently swallowed, #4182).\n\n")
+	b.WriteString(runtimeTemplate(templates, prompttmpl.AvailableCmdsQCKey, nil))
+	b.WriteString("\n")
 }
 
 // writeCommentFormatting emits the cross-platform file-first guardrail.
 // Windows branch carries the `$OutputEncoding` rationale because Windows
 // PowerShell silently drops non-ASCII through stdin.
-func writeCommentFormatting(b *strings.Builder) {
+func writeCommentFormatting(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Comment Formatting\n\n")
 	if runtimeGOOS == "windows" {
 		b.WriteString("On Windows, **always write the comment body to a UTF-8 file with your file-write tool first, then post it with `--content-file <path>`** — do NOT pipe via `--content-stdin` (PowerShell 5.1's `$OutputEncoding` defaults to ASCIIEncoding when piping to a native command, silently dropping non-ASCII characters as `?` before they reach `multica.exe`). Never use inline `--content` for agent-authored comments. Keep the same `--parent` value from the trigger comment when replying. Delete the temp file (`Remove-Item ./reply.md`) after posting; do not rely on `\\n` escapes.\n\n")
 		return
 	}
-	b.WriteString("For issue comments, **always write the comment body to a UTF-8 file with your file-write tool first, then post it with `--content-file <path>`**. Never use inline `--content` for agent-authored comments — the shell rewrites backticks / `$()` / quotes in the body (MUL-2904). Never use `--content-stdin` with a HEREDOC alongside other flags either — the heredoc/flag boundary is fragile and flags get silently swallowed (#4182). Keep the same `--parent` value from the trigger comment when replying. Delete the temp file (`rm ./reply.md`) after posting; do not rely on `\\n` escapes.\n\n")
+	b.WriteString(runtimeTemplate(templates, prompttmpl.CommentFormatKey, nil))
+	b.WriteString("\n")
 }
 
 // writeRepositories emits the Repositories section when at least one repo
@@ -305,14 +298,17 @@ func writeRepositories(b *strings.Builder, ctx TaskContextForEnv) {
 		return
 	}
 	b.WriteString("## Repositories\n\n")
-	b.WriteString("Available in this workspace — `multica repo checkout <url> [--ref <branch-or-sha>]` to fetch (creates a git worktree on a dedicated branch).\n\n")
+	var repoList strings.Builder
 	for _, repo := range ctx.Repos {
 		if repo.Description != "" {
-			fmt.Fprintf(b, "- %s — %s\n", repo.URL, repo.Description)
+			fmt.Fprintf(&repoList, "- %s — %s\n", repo.URL, repo.Description)
 		} else {
-			fmt.Fprintf(b, "- %s\n", repo.URL)
+			fmt.Fprintf(&repoList, "- %s\n", repo.URL)
 		}
 	}
+	b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.RepositoriesKey, map[string]string{
+		"repo_list": repoList.String(),
+	}))
 	b.WriteString("\n")
 }
 
@@ -323,46 +319,50 @@ func writeProjectContext(b *strings.Builder, ctx TaskContextForEnv) {
 		return
 	}
 	b.WriteString("## Project Context\n\n")
+	projectTitleBlock := ""
 	if ctx.ProjectTitle != "" {
-		fmt.Fprintf(b, "This issue belongs to **%s**.\n\n", ctx.ProjectTitle)
+		projectTitleBlock = fmt.Sprintf("This issue belongs to **%s**.\n\n", ctx.ProjectTitle)
 	}
+	projectDescriptionBlock := ""
 	if desc := strings.TrimSpace(ctx.ProjectDescription); desc != "" {
-		b.WriteString("Project description — durable context the project owner set for every task in this project:\n\n")
-		b.WriteString(desc)
-		b.WriteString("\n\n")
+		projectDescriptionBlock = "Project description — durable context the project owner set for every task in this project:\n\n" + desc + "\n\n"
 	}
+	projectResourcesBlock := ""
 	if len(ctx.ProjectResources) > 0 {
-		b.WriteString("Project resources (also written to `.multica/project/resources.json`):\n\n")
+		var resources strings.Builder
+		resources.WriteString("Project resources (also written to `.multica/project/resources.json`):\n\n")
 		for _, r := range ctx.ProjectResources {
-			fmt.Fprintf(b, "- %s\n", formatProjectResource(r))
+			fmt.Fprintf(&resources, "- %s\n", formatProjectResource(r))
 		}
-		b.WriteString("\nResources are pointers — open them only when relevant to the task. ")
-		b.WriteString("For `github_repo` resources, use `multica repo checkout <url>` to fetch the code. Add `--ref <branch-or-sha>` when a task or handoff names an exact revision.\n\n")
+		resources.WriteString("\nResources are pointers — open them only when relevant to the task. For `github_repo` resources, use `multica repo checkout <url>` to fetch the code. Add `--ref <branch-or-sha>` when a task or handoff names an exact revision.\n\n")
+		projectResourcesBlock = resources.String()
 	} else {
-		b.WriteString("This project has no resources attached yet.\n\n")
+		projectResourcesBlock = "This project has no resources attached yet.\n\n"
 	}
+	b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.ProjectContextKey, map[string]string{
+		"project_title_block":       projectTitleBlock,
+		"project_description_block": projectDescriptionBlock,
+		"project_resources_block":   projectResourcesBlock,
+	}))
+	b.WriteString("\n")
 }
 
 // writeIssueMetadata emits the Issue Metadata discipline section
 // (compressed). The dispatcher gates by kind.hasIssueContext(); this
 // helper does not re-check.
-func writeIssueMetadata(b *strings.Builder) {
+func writeIssueMetadata(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Issue Metadata\n\n")
-	b.WriteString("`metadata` is a small KV bag per issue — a high-signal scratchpad for facts future runs on this same issue will read more than once (PR URL, deploy URL, current blocker). Most runs pin **zero** new keys; that is the expected case.\n\n")
-	b.WriteString("- **Read on entry.** Metadata is hints, not truth: latest comment / code wins on conflict. Empty `{}` is normal.\n")
-	b.WriteString("- **Write on exit.** Pin only if BOTH: (a) materially important to this issue, AND (b) a future run is likely to re-read it. Otherwise leave the bag alone. Stale keys: overwrite with the new value or `multica issue metadata delete`.\n")
-	b.WriteString("- **What NOT to pin.** No secrets, tokens, or API keys. No logs or comment summaries. No runtime bookkeeping (attempts, run timestamps, agent ids). No single-run details — those belong in the result comment.\n")
-	b.WriteString("- **Recommended keys** (use snake_case ASCII; reuse these names so queries stay consistent): `pr_url`, `pr_number`, `pipeline_status`, `deploy_url`, `external_issue_url`, `waiting_on`, `blocked_reason`, `decision`.\n\n")
+	b.WriteString(runtimeTemplate(templates, prompttmpl.IssueMetadataKey, nil))
+	b.WriteString("\n")
 }
 
 // writeInstructionPrecedence emits the "Agent Identity wins over the
 // assignment workflow below" guardrail. Caller gates on
 // kind == kindAssignmentTriggered.
-func writeInstructionPrecedence(b *strings.Builder) {
+func writeInstructionPrecedence(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Instruction Precedence\n\n")
-	b.WriteString("Agent Identity instructions have priority over the assignment workflow below. ")
-	b.WriteString("If a workflow step conflicts with Agent Identity, skip the conflicting action and continue with the remaining compatible steps. ")
-	b.WriteString("Never treat this runtime workflow as permission to change issue status, investigate, implement, or otherwise act beyond your Agent Identity.\n\n")
+	b.WriteString(runtimeTemplate(templates, prompttmpl.InstructionPrecKey, nil))
+	b.WriteString("\n")
 }
 
 // writeWorkflowHeader emits the unconditional `### Workflow` heading.
@@ -468,10 +468,10 @@ func writeWorkflowAssignment(b *strings.Builder, ctx TaskContextForEnv) {
 
 // writeSubIssueCreation emits the Sub-issue Creation section (compressed
 // to two short paragraphs).
-func writeSubIssueCreation(b *strings.Builder) {
+func writeSubIssueCreation(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Sub-issue Creation\n\n")
-	b.WriteString("**Choosing `--status` when creating sub-issues.** `--status todo` = **start now** (default — agent assignees fire immediately). `--status backlog` = **wait**, then promote later with `multica issue status <child-id> todo`. Parallel children: all `--status todo`. Strict serial 1→2→3: only Step 1 `todo`, Steps 2/3 `--status backlog` from the start.\n\n")
-	b.WriteString("**Ordering with stages.** For phased plans, group children with `--stage <N>` (N ≥ 1) instead of hand-promoting the backlog chain — stage members run together, and the parent wakes once per stage. Use `--stage k --status backlog` for later stages, then `multica issue children <id>` to inspect groupings before promoting. Reach for stages whenever a plan has more than one step or a step must wait for a group.\n\n")
+	b.WriteString(runtimeTemplate(templates, prompttmpl.SubIssueCreateKey, nil))
+	b.WriteString("\n")
 }
 
 // writeSkills emits the Skills section listing skill names + descriptions.
@@ -480,51 +480,55 @@ func writeSkills(b *strings.Builder, provider string, ctx TaskContextForEnv) {
 		return
 	}
 	b.WriteString("## Skills\n\n")
-	switch provider {
-	case "claude", "codebuddy":
-		b.WriteString("You have the following skills installed (discovered automatically):\n\n")
-	case "codex", "copilot", "opencode", "openclaw", "pi", "cursor", "kimi", "kiro", "qoder", "antigravity":
-		b.WriteString("You have the following skills installed (discovered automatically):\n\n")
-	case "hermes":
-		b.WriteString("Detailed skill instructions are in `.agent_context/skills/`. Each subdirectory contains a `SKILL.md`.\n\n")
-	default:
-		b.WriteString("Detailed skill instructions are in `.agent_context/skills/`. Each subdirectory contains a `SKILL.md`.\n\n")
-	}
+	var skillsList strings.Builder
 	for _, skill := range ctx.AgentSkills {
 		if desc := strings.TrimSpace(skill.Description); desc != "" {
-			fmt.Fprintf(b, "- **%s** — %s\n", skill.Name, desc)
+			fmt.Fprintf(&skillsList, "- **%s** — %s\n", skill.Name, desc)
 		} else {
-			fmt.Fprintf(b, "- **%s**\n", skill.Name)
+			fmt.Fprintf(&skillsList, "- **%s**\n", skill.Name)
 		}
+	}
+	switch provider {
+	case "claude", "codebuddy":
+		b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.SkillsNativeKey, map[string]string{
+			"skills_list": skillsList.String(),
+		}))
+	case "codex", "copilot", "opencode", "openclaw", "pi", "cursor", "kimi", "kiro", "qoder", "antigravity":
+		b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.SkillsNativeKey, map[string]string{
+			"skills_list": skillsList.String(),
+		}))
+	case "hermes":
+		b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.SkillsFallbackKey, map[string]string{
+			"skills_list": skillsList.String(),
+		}))
+	default:
+		b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.SkillsFallbackKey, map[string]string{
+			"skills_list": skillsList.String(),
+		}))
 	}
 	b.WriteString("\n")
 }
 
 // writeMentions emits the @mention side-effects section (compressed).
-func writeMentions(b *strings.Builder) {
+func writeMentions(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Mentions\n\n")
-	b.WriteString("Mention links are **side-effecting actions**:\n\n")
-	b.WriteString("- `[MUL-123](mention://issue/<issue-id>)` — clickable link (no side effect)\n")
-	b.WriteString("- `[@Name](mention://member/<user-id>)` — **notifies a human**\n")
-	b.WriteString("- `[@Name](mention://agent/<agent-id>)` — **enqueues a new run for that agent**\n\n")
-	b.WriteString("### When NOT to use a mention link\n\n")
-	b.WriteString("Default: NO mention. Replying to another agent that just spoke to you, or thanking / acknowledging / signing off — **end with no mention at all**. An accidental `@mention` restarts an agent-to-agent loop and costs the user money.\n\n")
-	b.WriteString("### When a mention IS appropriate\n\n")
-	b.WriteString("Escalating to a human owner not yet involved; delegating a concrete new sub-task to another agent for the first time; or when the user explicitly asks to loop someone in. Otherwise **don't mention**. Silence ends conversations.\n\n")
+	b.WriteString(runtimeTemplate(templates, prompttmpl.MentionsKey, nil))
+	b.WriteString("\n")
 }
 
 // writeAttachments emits the Attachments pointer.
-func writeAttachments(b *strings.Builder) {
+func writeAttachments(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Attachments\n\n")
-	b.WriteString("Issues and comments may include file attachments (images, documents, etc.).\n")
-	b.WriteString("When a task includes attachment IDs and you need the files, inspect `multica attachment --help` and use the authenticated CLI path. Do not open Multica resource URLs directly.\n\n")
+	b.WriteString(runtimeTemplate(templates, prompttmpl.AttachmentsKey, nil))
+	b.WriteString("\n")
 }
 
 // writeAlwaysUseCLI emits the "must go through the multica CLI" guardrail
 // (compressed).
-func writeAlwaysUseCLI(b *strings.Builder) {
+func writeAlwaysUseCLI(b *strings.Builder, templates map[string]string) {
 	b.WriteString("## Important: Always Use the `multica` CLI\n\n")
-	b.WriteString("Access Multica platform resources (issues, comments, attachments, files) only through the `multica` CLI — never `curl` / `wget`. For any operation the CLI doesn't cover, post a comment mentioning the workspace owner rather than working around it.\n\n")
+	b.WriteString(runtimeTemplate(templates, prompttmpl.AlwaysUseCLIKey, nil))
+	b.WriteString("\n")
 }
 
 // writeOutput emits the kind-specific Output section.
@@ -532,22 +536,19 @@ func writeOutput(b *strings.Builder, kind taskKind, ctx TaskContextForEnv) {
 	b.WriteString("## Output\n\n")
 	switch kind {
 	case kindAutopilotRunOnly:
-		b.WriteString("This is a run-only autopilot task, so there may be no issue comment to post. Your final assistant output is captured automatically as the autopilot run result. Keep it concise and state the outcome.\n")
+		b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.OutputAutopilotKey, nil))
 	case kindQuickCreate:
-		b.WriteString("This is a quick-create task. There is NO existing issue to comment on. Your final stdout is captured automatically and the platform writes the user's success/failure inbox notification based on whether `multica issue create` succeeded.\n\n")
-		b.WriteString("- Do NOT call `multica issue comment add` — the issue you just created has no conversation context for this run.\n")
-		b.WriteString("- Print exactly one final line: `Created <identifier-or-id>: <title>` after a successful `multica issue create`. Use the created issue's `identifier` from JSON output when available; otherwise use its `id`. Do not assume any workspace issue prefix such as `MUL-`; workspaces can use custom prefixes.\n")
-		b.WriteString("- On CLI failure, exit with the CLI error as the only output. The platform translates that into a `quick_create_failed` inbox item carrying the original prompt for the user.\n")
+		b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.OutputQuickCreateKey, nil))
 	case kindChat:
-		b.WriteString("This is a chat session. Your reply is delivered directly to the chat window the user is reading.\n")
+		b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.OutputChatKey, nil))
 	default:
+		noActionBlock := "⚠️ **Final results MUST be delivered via `multica issue comment add`.** The user does NOT see your terminal output, assistant chat text, or run logs — only comments on the issue. A task that finishes without a result comment is invisible to the user, even if the work itself was correct.\n\n"
 		if ctx.IsSquadLeader {
-			b.WriteString("⚠️ **Final results MUST be delivered via `multica issue comment add`** — unless your outcome is `no_action`. When you evaluate a trigger and decide no action is needed, calling `multica squad activity <issue-id> no_action --reason \"...\"` alone is sufficient; you MUST exit without posting any comment. DO NOT post a comment that announces no_action, acknowledges another agent, or says you are exiting silently — such comments are noise. For all other outcomes (`action`, `failed`), a comment is still mandatory.\n\n")
-		} else {
-			b.WriteString("⚠️ **Final results MUST be delivered via `multica issue comment add`.** The user does NOT see your terminal output, assistant chat text, or run logs — only comments on the issue. A task that finishes without a result comment is invisible to the user, even if the work itself was correct.\n\n")
+			noActionBlock = "⚠️ **Final results MUST be delivered via `multica issue comment add`** — unless your outcome is `no_action`. When you evaluate a trigger and decide no action is needed, calling `multica squad activity <issue-id> no_action --reason \"...\"` alone is sufficient; you MUST exit without posting any comment. DO NOT post a comment that announces no_action, acknowledges another agent, or says you are exiting silently — such comments are noise. For all other outcomes (`action`, `failed`), a comment is still mandatory.\n\n"
 		}
-		b.WriteString("**Post exactly ONE comment per run — your final result, before this turn exits.** Do NOT post progress updates, plans, or \"here's what I'm about to do next\" as comments while you work; keep all planning and progress in your own reasoning.\n\n")
-		b.WriteString("Keep comments concise and natural — state the outcome, not the process (good: \"Fixed the login redirect. PR: https://...\"; bad: numbered process logs).\n")
+		b.WriteString(runtimeTemplate(ctx.PromptTemplates, prompttmpl.OutputIssueKey, map[string]string{
+			"no_action_block": noActionBlock,
+		}))
 	}
 }
 
@@ -579,8 +580,8 @@ func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
 	var b strings.Builder
 	kind := classifyTask(ctx)
 
-	writeHeader(&b)
-	writeBackgroundTaskSafetySlim(&b)
+	writeHeader(&b, ctx.PromptTemplates)
+	writeBackgroundTaskSafetySlim(&b, ctx.PromptTemplates)
 	writeAgentIdentity(&b, ctx)
 	writeWorkspaceInitPrompt(&b, ctx)
 	writeRequestingUser(&b, ctx)
@@ -590,13 +591,13 @@ func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
 
 	switch kind {
 	case kindQuickCreate:
-		writeAvailableCommandsQuickCreate(&b)
+		writeAvailableCommandsQuickCreate(&b, ctx.PromptTemplates)
 	default:
-		writeAvailableCommands(&b)
+		writeAvailableCommands(&b, ctx.PromptTemplates)
 	}
 
 	if kind == kindCommentTriggered || kind == kindAssignmentTriggered {
-		writeCommentFormatting(&b)
+		writeCommentFormatting(&b, ctx.PromptTemplates)
 	}
 
 	if kind != kindQuickCreate {
@@ -605,11 +606,11 @@ func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
 
 	if kind.hasIssueContext() {
 		writeProjectContext(&b, ctx)
-		writeIssueMetadata(&b)
+		writeIssueMetadata(&b, ctx.PromptTemplates)
 	}
 
 	if kind == kindAssignmentTriggered {
-		writeInstructionPrecedence(&b)
+		writeInstructionPrecedence(&b, ctx.PromptTemplates)
 	}
 
 	writeWorkflowHeader(&b)
@@ -627,7 +628,7 @@ func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
 	}
 
 	if kind.hasIssueContext() && ctx.IssueID != "" {
-		writeSubIssueCreation(&b)
+		writeSubIssueCreation(&b, ctx.PromptTemplates)
 	}
 
 	if kind != kindQuickCreate {
@@ -635,11 +636,11 @@ func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
 	}
 
 	if kind == kindCommentTriggered || kind == kindAssignmentTriggered {
-		writeMentions(&b)
-		writeAttachments(&b)
+		writeMentions(&b, ctx.PromptTemplates)
+		writeAttachments(&b, ctx.PromptTemplates)
 	}
 
-	writeAlwaysUseCLI(&b)
+	writeAlwaysUseCLI(&b, ctx.PromptTemplates)
 	writeOutput(&b, kind, ctx)
 
 	return b.String()
