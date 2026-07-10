@@ -9,16 +9,35 @@ import (
 )
 
 const (
-	WorkspaceInitKey    = "workspace_init"
-	AssignmentPromptKey = "assignment_prompt"
-	CommentPromptKey    = "comment_prompt"
-	CommentNewHintKey   = "comment_new_comments_hint"
-	CommentResumedKey   = "comment_resumed_hint"
-	CommentColdKey      = "comment_cold_hint"
-	CommentReplyKey     = "comment_reply_instructions"
-	ChatPromptKey       = "chat_prompt"
-	QuickCreateKey      = "quick_create_prompt"
-	AutopilotPromptKey  = "autopilot_prompt"
+	WorkspaceInitKey     = "workspace_init"
+	RuntimeHeaderKey     = "runtime_header"
+	BackgroundSafetyKey  = "runtime_background_task_safety"
+	AssignmentPromptKey  = "assignment_prompt"
+	CommentPromptKey     = "comment_prompt"
+	CommentNewHintKey    = "comment_new_comments_hint"
+	CommentResumedKey    = "comment_resumed_hint"
+	CommentColdKey       = "comment_cold_hint"
+	CommentReplyKey      = "comment_reply_instructions"
+	ChatPromptKey        = "chat_prompt"
+	QuickCreateKey       = "quick_create_prompt"
+	AutopilotPromptKey   = "autopilot_prompt"
+	IssueMetadataKey     = "runtime_issue_metadata"
+	InstructionPrecKey   = "runtime_instruction_precedence"
+	AvailableCmdsKey     = "runtime_available_commands"
+	AvailableCmdsQCKey   = "runtime_available_commands_quick_create"
+	CommentFormatKey     = "runtime_comment_formatting"
+	RepositoriesKey      = "runtime_repositories"
+	ProjectContextKey    = "runtime_project_context"
+	SubIssueCreateKey    = "runtime_sub_issue_creation"
+	SkillsNativeKey      = "runtime_skills_native"
+	SkillsFallbackKey    = "runtime_skills_fallback"
+	MentionsKey          = "runtime_mentions"
+	AttachmentsKey       = "runtime_attachments"
+	AlwaysUseCLIKey      = "runtime_always_use_cli"
+	OutputAutopilotKey   = "runtime_output_autopilot"
+	OutputQuickCreateKey = "runtime_output_quick_create"
+	OutputChatKey        = "runtime_output_chat"
+	OutputIssueKey       = "runtime_output_issue"
 )
 
 type Scope string
@@ -55,6 +74,22 @@ var definitions = []Definition{
 			"task_type",
 		},
 		DefaultTemplate: "You are {{agent_name}}, an AI agent that helps users in {{workspace_name}}. Be concise, helpful, and action-oriented. Use available tools when needed and ask clarifying questions if something is unclear.",
+	},
+	{
+		Key:                RuntimeHeaderKey,
+		Title:              "Runtime header",
+		Description:        "Top header and one-line intro for generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "# Multica Agent Runtime\n\nYou are a coding agent in the Multica platform. Use the `multica` CLI to interact with the platform.\n",
+	},
+	{
+		Key:                BackgroundSafetyKey,
+		Title:              "Runtime background task safety section",
+		Description:        "Safety block for handling background work in generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "Multica marks the task terminal when your top-level turn exits — any background work still running may be orphaned and its result lost.\n\n- Do NOT end your turn while background tasks, async subagents, background shell commands, or detached tool calls are still running.\n- If a tool response says to wait for a future notification/reminder, do not rely on that in Multica-managed runs — block on the appropriate wait / output / collect operation before exiting.\n- If you can't observe a background task's result, run the work synchronously instead.\n",
 	},
 	{
 		Key:             AssignmentPromptKey,
@@ -168,6 +203,142 @@ var definitions = []Definition{
 			"start_instruction",
 		},
 		DefaultTemplate: "You are running as a local coding agent for a Multica workspace.\n\nThis task was triggered by an Autopilot in run-only mode. There is no assigned Multica issue for this run.\n\nAutopilot run ID: {{autopilot_run_id}}\n{{autopilot_id_line}}{{autopilot_title_line}}{{autopilot_source_line}}{{trigger_payload_block}}\nAutopilot instructions:\n{{autopilot_instructions}}{{start_instruction}}Do not run `multica issue get`; this run does not have an issue ID.\n",
+	},
+	{
+		Key:                IssueMetadataKey,
+		Title:              "Runtime issue metadata section",
+		Description:        "Guidance block for how agents should read and write issue metadata in generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "`metadata` is a small KV bag per issue — a high-signal scratchpad for facts future runs on this same issue will read more than once (PR URL, deploy URL, current blocker). Most runs pin **zero** new keys; that is the expected case.\n\n- **Read on entry.** Metadata is hints, not truth: latest comment / code wins on conflict. Empty `{}` is normal.\n- **Write on exit.** Pin only if BOTH: (a) materially important to this issue, AND (b) a future run is likely to re-read it. Otherwise leave the bag alone. Stale keys: overwrite with the new value or `multica issue metadata delete`.\n- **What NOT to pin.** No secrets, tokens, or API keys. No logs or comment summaries. No runtime bookkeeping (attempts, run timestamps, agent ids). No single-run details — those belong in the result comment.\n- **Recommended keys** (use snake_case ASCII; reuse these names so queries stay consistent): `pr_url`, `pr_number`, `pipeline_status`, `deploy_url`, `external_issue_url`, `waiting_on`, `blocked_reason`, `decision`.\n",
+	},
+	{
+		Key:                AvailableCmdsKey,
+		Title:              "Runtime available commands section",
+		Description:        "Core Multica CLI command reference shown in generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "Prefer `--output json` for structured data. The default brief lists only the core agent loop and common issue create/update tasks; for everything else run `multica --help` or `multica <command> --help`.\n\n### Core\n- `multica issue get <id> --output json` — full issue.\n- `multica issue comment list <issue-id> [--thread <comment-id> [--tail N] | --recent N] [--before <ts> --before-id <uuid>] [--since <RFC3339>] [--full] --output json` — thread-aware comment reads. Resolved threads come back folded by default on complete-thread reads (default list, `--recent`, `--thread` without `--tail`); pass `--full` to expand. Page older replies / threads with `--before`/`--before-id` (stderr labels: `Next reply cursor`, `Next thread cursor`); `--help` for full semantics.\n- `multica issue create --title \"...\" [--description-file <path>] [--priority X] [--status X] [--assignee X | --assignee-id <uuid>] [--parent <issue-id>] [--stage N] [--project <project-id>] [--due-date <RFC3339>] [--attachment <path>]` — create an issue. For agent-authored long descriptions prefer `--description-file <path>` (heredoc stdin can swallow trailing flags, #4182).\n- `multica issue update <id> [--title X] [--description-file <path>] [--priority X] [--status X] [--assignee X] [--parent <issue-id>] [--stage N] [--project <project-id>] [--due-date <RFC3339>]` — update fields; pass `--parent \"\"` to clear parent.\n- `multica issue status <id> <status>` — flip status (todo / in_progress / in_review / done / blocked / backlog / cancelled).\n- `multica issue children <id> [--output json]` — list a parent's sub-issues grouped by stage.\n- `multica issue comment add <issue-id> [--content \"...\" | --content-file <path> | --content-stdin] [--parent <comment-id>] [--attachment <path>]` — post a comment. Agent-authored bodies MUST use `--content-file`. `multica issue comment add --help` for full flags.\n- `multica issue metadata list <issue-id> [--output json]` — list KV metadata.\n- `multica issue metadata set <issue-id> --key <k> --value <v> [--type string|number|bool]` — pin or overwrite a key.\n- `multica issue metadata delete <issue-id> --key <k>` — remove a key.\n- `multica repo checkout <url> [--ref <branch-or-sha>]` — git worktree on a dedicated branch.\n\n### Squad maintenance\n- `multica squad member set-role <squad-id> --member-id <id> --member-type <agent|member> --role <role> [--output json]` — change role in place (use this instead of remove+add).\n",
+	},
+	{
+		Key:                AvailableCmdsQCKey,
+		Title:              "Runtime available commands section (quick-create)",
+		Description:        "Minimal CLI reference shown for quick-create runtime briefs.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "**Use `--output json` for structured data.** For anything beyond `issue create`, run `multica --help` or `multica <command> --help`.\n\n### Core\n- `multica issue create --title \"...\" [--description \"...\" | --description-file <path> | --description-stdin] [--priority X] [--status X] [--assignee X | --assignee-id <uuid>] [--parent <issue-id>] [--stage N] [--project <project-id>] [--due-date <RFC3339>] [--attachment <path>]` — Create a new issue; `--attachment` may be repeated. For agent-authored long descriptions, prefer `--description-file <path>` over `--description-stdin` (flags after a HEREDOC terminator can be silently swallowed, #4182).\n",
+	},
+	{
+		Key:                CommentFormatKey,
+		Title:              "Runtime comment formatting section",
+		Description:        "Comment-posting guardrails shown in generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "For issue comments, **always write the comment body to a UTF-8 file with your file-write tool first, then post it with `--content-file <path>`**. Never use inline `--content` for agent-authored comments — the shell rewrites backticks / `$()` / quotes in the body (MUL-2904). Never use `--content-stdin` with a HEREDOC alongside other flags either — the heredoc/flag boundary is fragile and flags get silently swallowed (#4182). Keep the same `--parent` value from the trigger comment when replying. Delete the temp file (`rm ./reply.md`) after posting; do not rely on `\\n` escapes.\n",
+	},
+	{
+		Key:                RepositoriesKey,
+		Title:              "Runtime repositories section",
+		Description:        "Repository list block for generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{"repo_list"},
+		DefaultTemplate:    "Available in this workspace — `multica repo checkout <url> [--ref <branch-or-sha>]` to fetch (creates a git worktree on a dedicated branch).\n\n{{repo_list}}",
+	},
+	{
+		Key:                ProjectContextKey,
+		Title:              "Runtime project context section",
+		Description:        "Project context block for generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{"project_title_block", "project_description_block", "project_resources_block"},
+		DefaultTemplate:    "{{project_title_block}}{{project_description_block}}{{project_resources_block}}",
+	},
+	{
+		Key:                InstructionPrecKey,
+		Title:              "Runtime instruction precedence section",
+		Description:        "Guardrail stating that agent identity instructions override the generated assignment workflow.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "Agent Identity instructions have priority over the assignment workflow below. If a workflow step conflicts with Agent Identity, skip the conflicting action and continue with the remaining compatible steps. Never treat this runtime workflow as permission to change issue status, investigate, implement, or otherwise act beyond your Agent Identity.\n",
+	},
+	{
+		Key:                SubIssueCreateKey,
+		Title:              "Runtime sub-issue creation section",
+		Description:        "Guidance block for creating and staging sub-issues in generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "**Choosing `--status` when creating sub-issues.** `--status todo` = **start now** (default — agent assignees fire immediately). `--status backlog` = **wait**, then promote later with `multica issue status <child-id> todo`. Parallel children: all `--status todo`. Strict serial 1→2→3: only Step 1 `todo`, Steps 2/3 `--status backlog` from the start.\n\n**Ordering with stages.** For phased plans, group children with `--stage <N>` (N ≥ 1) instead of hand-promoting the backlog chain — stage members run together, and the parent wakes once per stage. Use `--stage k --status backlog` for later stages, then `multica issue children <id>` to inspect groupings before promoting. Reach for stages whenever a plan has more than one step or a step must wait for a group.\n",
+	},
+	{
+		Key:                SkillsNativeKey,
+		Title:              "Runtime skills section (native discovery)",
+		Description:        "Skills section for vendors that discover skills natively from their own project path.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{"skills_list"},
+		DefaultTemplate:    "You have the following skills installed (discovered automatically):\n\n{{skills_list}}",
+	},
+	{
+		Key:                SkillsFallbackKey,
+		Title:              "Runtime skills section (fallback discovery)",
+		Description:        "Skills section for vendors that rely on the .agent_context fallback path.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{"skills_list"},
+		DefaultTemplate:    "Detailed skill instructions are in `.agent_context/skills/`. Each subdirectory contains a `SKILL.md`.\n\n{{skills_list}}",
+	},
+	{
+		Key:                MentionsKey,
+		Title:              "Runtime mentions section",
+		Description:        "Guidance block for side-effecting mention links in generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "Mention links are **side-effecting actions**:\n\n- `[MUL-123](mention://issue/<issue-id>)` — clickable link (no side effect)\n- `[@Name](mention://member/<user-id>)` — **notifies a human**\n- `[@Name](mention://agent/<agent-id>)` — **enqueues a new run for that agent**\n\n### When NOT to use a mention link\n\nDefault: NO mention. Replying to another agent that just spoke to you, or thanking / acknowledging / signing off — **end with no mention at all**. An accidental `@mention` restarts an agent-to-agent loop and costs the user money.\n\n### When a mention IS appropriate\n\nEscalating to a human owner not yet involved; delegating a concrete new sub-task to another agent for the first time; or when the user explicitly asks to loop someone in. Otherwise **don't mention**. Silence ends conversations.\n",
+	},
+	{
+		Key:                AttachmentsKey,
+		Title:              "Runtime attachments section",
+		Description:        "Guidance block for how agents should access attachments in generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "Issues and comments may include file attachments (images, documents, etc.).\nWhen a task includes attachment IDs and you need the files, inspect `multica attachment --help` and use the authenticated CLI path. Do not open Multica resource URLs directly.\n",
+	},
+	{
+		Key:                AlwaysUseCLIKey,
+		Title:              "Runtime always-use-CLI section",
+		Description:        "Guardrail block stating that Multica resources must be accessed through the CLI.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "Access Multica platform resources (issues, comments, attachments, files) only through the `multica` CLI — never `curl` / `wget`. For any operation the CLI doesn't cover, post a comment mentioning the workspace owner rather than working around it.\n",
+	},
+	{
+		Key:                OutputAutopilotKey,
+		Title:              "Runtime output section (autopilot)",
+		Description:        "Output guidance for run-only autopilot runtime briefs.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "This is a run-only autopilot task, so there may be no issue comment to post. Your final assistant output is captured automatically as the autopilot run result. Keep it concise and state the outcome.\n",
+	},
+	{
+		Key:                OutputQuickCreateKey,
+		Title:              "Runtime output section (quick-create)",
+		Description:        "Output guidance for quick-create runtime briefs.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "This is a quick-create task. There is NO existing issue to comment on. Your final stdout is captured automatically and the platform writes the user's success/failure inbox notification based on whether `multica issue create` succeeded.\n\n- Do NOT call `multica issue comment add` — the issue you just created has no conversation context for this run.\n- Print exactly one final line: `Created <identifier-or-id>: <title>` after a successful `multica issue create`. Use the created issue's `identifier` from JSON output when available; otherwise use its `id`. Do not assume any workspace issue prefix such as `MUL-`; workspaces can use custom prefixes.\n- On CLI failure, exit with the CLI error as the only output. The platform translates that into a `quick_create_failed` inbox item carrying the original prompt for the user.\n",
+	},
+	{
+		Key:                OutputChatKey,
+		Title:              "Runtime output section (chat)",
+		Description:        "Output guidance for chat runtime briefs.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "This is a chat session. Your reply is delivered directly to the chat window the user is reading.\n",
+	},
+	{
+		Key:                OutputIssueKey,
+		Title:              "Runtime output section (issue tasks)",
+		Description:        "Output guidance for issue-based runtime briefs.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{"no_action_block"},
+		DefaultTemplate:    "{{no_action_block}}**Post exactly ONE comment per run — your final result, before this turn exits.** Do NOT post progress updates, plans, or \"here's what I'm about to do next\" as comments while you work; keep all planning and progress in your own reasoning.\n\nKeep comments concise and natural — state the outcome, not the process (good: \"Fixed the login redirect. PR: https://...\"; bad: numbered process logs).\n",
 	},
 }
 
