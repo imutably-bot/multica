@@ -9,6 +9,10 @@
     "archive_all_read": "归档全部已读",
     "archive_completed": "归档已完成"
   },
+  "search": {
+    "placeholder": "搜索收件箱",
+    "no_results": "没有匹配的通知"
+  },
   "list": {
     "empty": "暂无通知",
     "mark_done_tooltip": "标为已完成",

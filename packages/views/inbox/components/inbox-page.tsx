@@ -33,9 +33,11 @@ import {
   BookCheck,
   ListChecks,
   ArrowLeft,
+  Search,
 } from "lucide-react";
 import type { InboxItem } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
+import { Input } from "@multica/ui/components/ui/input";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -74,6 +76,13 @@ export function InboxPage() {
   const items = useMemo(() => deduplicateInboxItems(rawItems), [rawItems]);
 
   const selected = items.find((i) => (i.issue_id ?? i.id) === selectedKey) ?? null;
+
+  // Client-side filter over the already-fetched inbox list (ListInbox has no
+  // server-side pagination — see server/internal/handler/inbox.go). Matches
+  // against the same title the row/detail already render, plus body text and
+  // the localized type label, so e.g. searching "assigned" finds
+  // issue_assigned notifications even when the issue title doesn't say so.
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Track the last key we actually resolved against the inbox list. Lets the
   // fallback effect distinguish "shared-link to a notification not in our
@@ -124,6 +133,20 @@ export function InboxPage() {
   const timeAgo = useTimeAgo();
   const typeLabels = useTypeLabels();
 
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((item) => {
+      const haystack = [
+        getInboxDisplayTitle(item),
+        item.body ?? "",
+        typeLabels[item.type],
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [items, searchQuery, typeLabels]);
 
   // Auto-mark-read whenever a selected item is unread — covers both click-
   // to-select and URL-param-select (e.g. OS notification click on desktop).
@@ -267,14 +290,31 @@ export function InboxPage() {
     </PageHeader>
   );
 
+  const searchBar = items.length > 0 && (
+    <div className="relative shrink-0 px-3 py-2">
+      <Search className="pointer-events-none absolute left-5.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder={t(($) => $.search.placeholder)}
+        className="h-8 pl-8 text-sm"
+      />
+    </div>
+  );
+
   const listBody = items.length === 0 ? (
     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
       <Inbox className="mb-3 h-8 w-8 text-muted-foreground/50" />
       <p className="text-sm">{t(($) => $.list.empty)}</p>
     </div>
+  ) : filteredItems.length === 0 ? (
+    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+      <Search className="mb-3 h-8 w-8 text-muted-foreground/50" />
+      <p className="text-sm">{t(($) => $.search.no_results)}</p>
+    </div>
   ) : (
     <div>
-      {items.map((item) => (
+      {filteredItems.map((item) => (
         <InboxListItem
           key={item.id}
           item={item}
@@ -414,6 +454,7 @@ export function InboxPage() {
     return (
       <div className="flex flex-1 flex-col min-h-0">
         {listHeader}
+        {searchBar}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {listBody}
         </div>
@@ -460,6 +501,7 @@ export function InboxPage() {
       <ResizablePanel id="list" defaultSize={320} minSize={240} maxSize={480} groupResizeBehavior="preserve-pixel-size">
       <div className="flex flex-col border-r h-full">
         {listHeader}
+        {searchBar}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {listBody}
         </div>

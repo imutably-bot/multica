@@ -228,6 +228,7 @@ type SearchIssueResponse struct {
 	MatchedSnippet            *string `json:"matched_snippet,omitempty"`
 	MatchedDescriptionSnippet *string `json:"matched_description_snippet,omitempty"`
 	MatchedCommentSnippet     *string `json:"matched_comment_snippet,omitempty"`
+	MatchedLogSnippet         *string `json:"matched_log_snippet,omitempty"`
 }
 
 // extractSnippet extracts a snippet of text around the first occurrence of query.
@@ -376,6 +377,7 @@ type searchResult struct {
 	totalCount            int64
 	matchSource           string
 	matchedCommentContent string
+	matchedLogContent     string
 }
 
 // buildSearchQuery builds a dynamic SQL query for issue search.
@@ -418,13 +420,29 @@ func buildSearchQuery(phrase string, terms []string, queryNum int, hasNum bool, 
 		}
 	}
 
+	// Agent execution log (task_message) search. Matched as two separate
+	// LIKE conditions (content, output) rather than a concatenated
+	// expression so each can use its own bigram index (migration 135) —
+	// a concatenated "content || ' ' || output" column expression can't be
+	// matched by a plain-column GIN index. logDisplayExpr is only used for
+	// the SELECT list (matched_log_content), where it's fine to combine
+	// both fields for the snippet shown to the user.
+	logJoin := "task_message tm JOIN agent_task_queue atq ON atq.id = tm.task_id"
+	const logDisplayExpr = "(COALESCE(tm.content, '') || ' ' || COALESCE(tm.output, ''))"
+	logMatchCond := func(param string) string {
+		return fmt.Sprintf("(LOWER(COALESCE(tm.content, '')) LIKE %s OR LOWER(COALESCE(tm.output, '')) LIKE %s)", param, param)
+	}
+	logExists := func(cond string) string {
+		return fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE atq.issue_id = i.id AND %s)", logJoin, cond)
+	}
+
 	// --- WHERE clause ---
 	var whereParts []string
 
-	// Full phrase match: title, description, or comment
+	// Full phrase match: title, description, comment, or agent execution log
 	phraseMatch := fmt.Sprintf(
-		"(LOWER(i.title) LIKE %s OR LOWER(COALESCE(i.description, '')) LIKE %s OR EXISTS (SELECT 1 FROM comment c WHERE c.issue_id = i.id AND LOWER(c.content) LIKE %s))",
-		phraseContainsParam, phraseContainsParam, phraseContainsParam,
+		"(LOWER(i.title) LIKE %s OR LOWER(COALESCE(i.description, '')) LIKE %s OR EXISTS (SELECT 1 FROM comment c WHERE c.issue_id = i.id AND LOWER(c.content) LIKE %s) OR %s)",
+		phraseContainsParam, phraseContainsParam, phraseContainsParam, logExists(logMatchCond(phraseContainsParam)),
 	)
 	whereParts = append(whereParts, phraseMatch)
 
@@ -433,8 +451,8 @@ func buildSearchQuery(phrase string, terms []string, queryNum int, hasNum bool, 
 		var termConditions []string
 		for _, tp := range termContainsParams {
 			termConditions = append(termConditions, fmt.Sprintf(
-				"(LOWER(i.title) LIKE %s OR LOWER(COALESCE(i.description, '')) LIKE %s OR EXISTS (SELECT 1 FROM comment c WHERE c.issue_id = i.id AND LOWER(c.content) LIKE %s))",
-				tp, tp, tp,
+				"(LOWER(i.title) LIKE %s OR LOWER(COALESCE(i.description, '')) LIKE %s OR EXISTS (SELECT 1 FROM comment c WHERE c.issue_id = i.id AND LOWER(c.content) LIKE %s) OR %s)",
+				tp, tp, tp, logExists(logMatchCond(tp)),
 			))
 		}
 		whereParts = append(whereParts, "("+strings.Join(termConditions, " AND ")+")")
@@ -504,7 +522,19 @@ func buildSearchQuery(phrase string, terms []string, queryNum int, hasNum bool, 
 		rankCases = append(rankCases, fmt.Sprintf("WHEN EXISTS (SELECT 1 FROM comment c WHERE c.issue_id = i.id AND (%s)) THEN 8", strings.Join(commentTerms, " AND ")))
 	}
 
-	rankExpr := "CASE " + strings.Join(rankCases, " ") + " ELSE 9 END"
+	// Tier 9: Agent execution log (task_message) contains phrase
+	rankCases = append(rankCases, fmt.Sprintf("WHEN %s THEN 9", logExists(logMatchCond(phraseContainsParam))))
+
+	// Tier 10: Agent execution log matches all words (multi-word only)
+	if len(termContainsParams) > 1 {
+		var logTerms []string
+		for _, tp := range termContainsParams {
+			logTerms = append(logTerms, logMatchCond(tp))
+		}
+		rankCases = append(rankCases, fmt.Sprintf("WHEN %s THEN 10", logExists(strings.Join(logTerms, " AND "))))
+	}
+
+	rankExpr := "CASE " + strings.Join(rankCases, " ") + " ELSE 11 END"
 
 	// Status priority: active issues first
 	statusRank := `CASE i.status
@@ -519,29 +549,37 @@ func buildSearchQuery(phrase string, terms []string, queryNum int, hasNum bool, 
 	END`
 
 	// --- match_source expression ---
+	commentExistsCond := fmt.Sprintf("EXISTS (SELECT 1 FROM comment c WHERE c.issue_id = i.id AND LOWER(c.content) LIKE %s)", phraseContainsParam)
 	matchSourceExpr := fmt.Sprintf(`CASE
 		WHEN LOWER(i.title) LIKE %s THEN 'title'
 		WHEN LOWER(COALESCE(i.description, '')) LIKE %s THEN 'description'
-		ELSE 'comment'
-	END`, phraseContainsParam, phraseContainsParam)
+		WHEN %s THEN 'comment'
+		ELSE 'log'
+	END`, phraseContainsParam, phraseContainsParam, commentExistsCond)
 
-	// For multi-word: also check if all terms match in title/description
+	// For multi-word: also check if all terms match in title/description/comment
 	if len(termContainsParams) > 1 {
 		var titleTerms []string
 		var descTerms []string
+		var commentTerms []string
 		for _, tp := range termContainsParams {
 			titleTerms = append(titleTerms, fmt.Sprintf("LOWER(i.title) LIKE %s", tp))
 			descTerms = append(descTerms, fmt.Sprintf("LOWER(COALESCE(i.description, '')) LIKE %s", tp))
+			commentTerms = append(commentTerms, fmt.Sprintf("LOWER(c.content) LIKE %s", tp))
 		}
+		commentAllTermsCond := fmt.Sprintf("EXISTS (SELECT 1 FROM comment c WHERE c.issue_id = i.id AND (%s))", strings.Join(commentTerms, " AND "))
 		matchSourceExpr = fmt.Sprintf(`CASE
 			WHEN LOWER(i.title) LIKE %s THEN 'title'
 			WHEN (%s) THEN 'title'
 			WHEN LOWER(COALESCE(i.description, '')) LIKE %s THEN 'description'
 			WHEN (%s) THEN 'description'
-			ELSE 'comment'
+			WHEN %s THEN 'comment'
+			WHEN %s THEN 'comment'
+			ELSE 'log'
 		END`,
 			phraseContainsParam, strings.Join(titleTerms, " AND "),
 			phraseContainsParam, strings.Join(descTerms, " AND "),
+			commentExistsCond, commentAllTermsCond,
 		)
 	}
 
@@ -568,6 +606,30 @@ func buildSearchQuery(phrase string, terms []string, queryNum int, hasNum bool, 
 		)`, phraseContainsParam, strings.Join(commentTerms, " AND "))
 	}
 
+	// --- matched_log_content subquery ---
+	// Always return matching agent execution log text regardless of
+	// match_source, so the frontend can show a log snippet (e.g. alongside a
+	// title match) the same way it does for comments.
+	logSubquery := fmt.Sprintf(`COALESCE(
+		(SELECT %s FROM %s
+		 WHERE atq.issue_id = i.id AND %s
+		 ORDER BY tm.created_at DESC LIMIT 1),
+		''
+	)`, logDisplayExpr, logJoin, logMatchCond(phraseContainsParam))
+
+	if len(termContainsParams) > 1 {
+		var logTerms []string
+		for _, tp := range termContainsParams {
+			logTerms = append(logTerms, logMatchCond(tp))
+		}
+		logSubquery = fmt.Sprintf(`COALESCE(
+			(SELECT %s FROM %s
+			 WHERE atq.issue_id = i.id AND (%s OR (%s))
+			 ORDER BY tm.created_at DESC LIMIT 1),
+			''
+		)`, logDisplayExpr, logJoin, logMatchCond(phraseContainsParam), strings.Join(logTerms, " AND "))
+	}
+
 	limitParam := nextArg(nil)  // placeholder
 	offsetParam := nextArg(nil) // placeholder
 
@@ -577,13 +639,15 @@ func buildSearchQuery(phrase string, terms []string, queryNum int, hasNum bool, 
 		i.start_date, i.due_date, i.created_at, i.updated_at, i.number, i.project_id,
 		COUNT(*) OVER() AS total_count,
 		%s AS match_source,
-		%s AS matched_comment_content
+		%s AS matched_comment_content,
+		%s AS matched_log_content
 	FROM issue i
 	WHERE i.workspace_id = %s AND %s
 	ORDER BY %s, %s, i.updated_at DESC
 	LIMIT %s OFFSET %s`,
 		matchSourceExpr,
 		commentSubquery,
+		logSubquery,
 		wsParam,
 		whereClause,
 		rankExpr,
@@ -671,6 +735,7 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 			&sr.totalCount,
 			&sr.matchSource,
 			&sr.matchedCommentContent,
+			&sr.matchedLogContent,
 		); err != nil {
 			slog.Warn("search issues scan failed", "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to search issues")
@@ -711,6 +776,11 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 				snippet := extractSnippet(sr.issue.Description.String, q)
 				sir.MatchedDescriptionSnippet = &snippet
 			}
+		}
+		// Always populate log snippet when a matching agent execution log exists
+		if strings.TrimSpace(sr.matchedLogContent) != "" {
+			snippet := extractSnippet(sr.matchedLogContent, q)
+			sir.MatchedLogSnippet = &snippet
 		}
 		resp[i] = sir
 	}
