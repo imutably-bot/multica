@@ -9,6 +9,10 @@
     "archive_all_read": "읽은 항목 모두 보관",
     "archive_completed": "완료된 항목 보관"
   },
+  "search": {
+    "placeholder": "인박스 검색",
+    "no_results": "일치하는 알림이 없습니다"
+  },
   "list": {
     "empty": "알림이 없습니다",
     "mark_done_tooltip": "완료로 표시",

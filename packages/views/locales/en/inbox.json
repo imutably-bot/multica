@@ -9,6 +9,10 @@
     "archive_all_read": "Archive all read",
     "archive_completed": "Archive completed"
   },
+  "search": {
+    "placeholder": "Search inbox",
+    "no_results": "No matching notifications"
+  },
   "list": {
     "empty": "No notifications",
     "mark_done_tooltip": "Mark as done",

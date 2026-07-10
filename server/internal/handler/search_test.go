@@ -26,6 +26,12 @@ func TestBuildSearchQuery_SingleTerm(t *testing.T) {
 	if !strings.Contains(query, "LOWER(c.content) LIKE") {
 		t.Error("query should contain LOWER(c.content) LIKE")
 	}
+	if !strings.Contains(query, "tm.content") || !strings.Contains(query, "tm.output") {
+		t.Error("query should search agent execution log (task_message content/output)")
+	}
+	if !strings.Contains(query, "ELSE 'log'") {
+		t.Error("match_source should fall back to 'log' when no title/description/comment match")
+	}
 
 	// Exact title rank should not double-LOWER the pattern.
 	if strings.Contains(query, "LOWER(i.title) = LOWER(") {
@@ -214,9 +220,48 @@ func TestBuildSearchQuery_CommentRankTiers(t *testing.T) {
 	if !strings.Contains(query, "THEN 8") {
 		t.Error("query should contain tier 8 for comment all-term match")
 	}
-	// Fallback should be 9, not 7
-	if !strings.Contains(query, "ELSE 9") {
-		t.Error("query fallback should be ELSE 9")
+	// Fallback should be 11, not 9 (the pre-log-search fallback)
+	if !strings.Contains(query, "ELSE 11") {
+		t.Error("query fallback should be ELSE 11")
+	}
+}
+
+func TestBuildSearchQuery_LogRankTiers(t *testing.T) {
+	query, _ := buildSearchQuery("test phrase", []string{"test", "phrase"}, 0, false, false)
+
+	// Agent execution log phrase match should be tier 9
+	if !strings.Contains(query, "THEN 9") {
+		t.Error("query should contain tier 9 for log phrase match")
+	}
+	// Agent execution log all-term match should be tier 10
+	if !strings.Contains(query, "THEN 10") {
+		t.Error("query should contain tier 10 for log all-term match")
+	}
+	// The log join should reference task_message/agent_task_queue, not just comments
+	if !strings.Contains(query, "task_message tm JOIN agent_task_queue atq") {
+		t.Error("query should join task_message/agent_task_queue for log search")
+	}
+	if !strings.Contains(query, "match_source") {
+		t.Error("query should select match_source")
+	}
+}
+
+func TestBuildSearchQuery_LogMatchesContentAndOutputSeparately(t *testing.T) {
+	query, _ := buildSearchQuery("deploy", []string{"deploy"}, 0, false, false)
+
+	// Content and output must be matched as separate LIKE conditions (not
+	// concatenated into one expression) so each can use its own bigram
+	// index (migration 135_task_message_search_index) — a concatenated
+	// "content || ' ' || output" column expression can't be matched by a
+	// plain-column GIN index.
+	if !strings.Contains(query, "LOWER(COALESCE(tm.content, '')) LIKE") {
+		t.Error("query should match tm.content independently with LOWER(COALESCE(...))")
+	}
+	if !strings.Contains(query, "LOWER(COALESCE(tm.output, '')) LIKE") {
+		t.Error("query should match tm.output independently with LOWER(COALESCE(...))")
+	}
+	if strings.Contains(query, "LOWER((COALESCE(tm.content") {
+		t.Error("query should not match against a concatenated content||output expression")
 	}
 }
 
@@ -236,15 +281,16 @@ func TestBuildSearchQuery_DescriptionRankTiers(t *testing.T) {
 func TestBuildSearchQuery_SingleTermNoAllTermTiers(t *testing.T) {
 	query, _ := buildSearchQuery("html", []string{"html"}, 0, false, false)
 
-	// Extract the rank CASE expression (ends with "ELSE 9 END") to avoid
+	// Extract the rank CASE expression (ends with "ELSE 11 END") to avoid
 	// false matches against statusRank which also contains THEN 4/6.
-	rankEnd := strings.Index(query, "ELSE 9 END")
+	rankEnd := strings.Index(query, "ELSE 11 END")
 	if rankEnd == -1 {
-		t.Fatal("query should contain rank expression with ELSE 9 END")
+		t.Fatal("query should contain rank expression with ELSE 11 END")
 	}
 	rankExpr := query[:rankEnd]
 
-	// Single-term queries should NOT have tier 4 (title all-terms), 6 (desc all-terms), or 8 (comment all-terms)
+	// Single-term queries should NOT have tier 4 (title all-terms), 6 (desc
+	// all-terms), 8 (comment all-terms), or 10 (log all-terms)
 	if strings.Contains(rankExpr, "THEN 4") {
 		t.Error("single-term query should not have tier 4 (title all-terms)")
 	}
@@ -253,5 +299,8 @@ func TestBuildSearchQuery_SingleTermNoAllTermTiers(t *testing.T) {
 	}
 	if strings.Contains(rankExpr, "THEN 8") {
 		t.Error("single-term query should not have tier 8 (comment all-terms)")
+	}
+	if strings.Contains(rankExpr, "THEN 10") {
+		t.Error("single-term query should not have tier 10 (log all-terms)")
 	}
 }

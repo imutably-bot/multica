@@ -21,6 +21,7 @@ import {
   Sun,
   BookOpenText,
   Settings,
+  Terminal,
   type LucideIcon,
 } from "lucide-react";
 import { Command as CommandPrimitive } from "cmdk";
@@ -666,6 +667,17 @@ export function SearchCommand() {
                         <span className="text-xs text-muted-foreground truncate">
                           <HighlightText
                             text={issue.matched_comment_snippet}
+                            query={query}
+                          />
+                        </span>
+                      </div>
+                    )}
+                    {issue.matched_log_snippet && (
+                      <div className="flex items-start gap-2 pl-[26px]">
+                        <Terminal className="size-3 shrink-0 text-muted-foreground mt-0.5" />
+                        <span className="text-xs text-muted-foreground truncate">
+                          <HighlightText
+                            text={issue.matched_log_snippet}
                             query={query}
                           />
                         </span>
