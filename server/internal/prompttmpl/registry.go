@@ -12,6 +12,11 @@ const (
 	WorkspaceInitKey     = "workspace_init"
 	RuntimeHeaderKey     = "runtime_header"
 	BackgroundSafetyKey  = "runtime_background_task_safety"
+	AgentIdentityKey     = "runtime_agent_identity"
+	RequestingUserKey    = "runtime_requesting_user"
+	TaskInitiatorKey     = "runtime_task_initiator"
+	WorkspaceContextKey  = "runtime_workspace_context"
+	ConnectedAppsKey     = "runtime_connected_apps"
 	AssignmentPromptKey  = "assignment_prompt"
 	CommentPromptKey     = "comment_prompt"
 	CommentNewHintKey    = "comment_new_comments_hint"
@@ -25,6 +30,11 @@ const (
 	InstructionPrecKey   = "runtime_instruction_precedence"
 	AvailableCmdsKey     = "runtime_available_commands"
 	AvailableCmdsQCKey   = "runtime_available_commands_quick_create"
+	WorkflowChatKey      = "runtime_workflow_chat"
+	WorkflowQuickKey     = "runtime_workflow_quick_create"
+	WorkflowAutopilotKey = "runtime_workflow_autopilot"
+	WorkflowCommentKey   = "runtime_workflow_comment"
+	WorkflowAssignKey    = "runtime_workflow_assignment"
 	CommentFormatKey     = "runtime_comment_formatting"
 	RepositoriesKey      = "runtime_repositories"
 	ProjectContextKey    = "runtime_project_context"
@@ -90,6 +100,58 @@ var definitions = []Definition{
 		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
 		SupportedVariables: []string{},
 		DefaultTemplate:    "Multica marks the task terminal when your top-level turn exits — any background work still running may be orphaned and its result lost.\n\n- Do NOT end your turn while background tasks, async subagents, background shell commands, or detached tool calls are still running.\n- If a tool response says to wait for a future notification/reminder, do not rely on that in Multica-managed runs — block on the appropriate wait / output / collect operation before exiting.\n- If you can't observe a background task's result, run the work synchronously instead.\n",
+	},
+	{
+		Key:             AgentIdentityKey,
+		Title:           "Runtime agent identity section",
+		Description:     "Agent identity block for generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes: []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{
+			"agent_name_block",
+			"agent_instructions_block",
+		},
+		DefaultTemplate: "{{agent_name_block}}{{agent_instructions_block}}",
+	},
+	{
+		Key:             RequestingUserKey,
+		Title:           "Runtime requesting user section",
+		Description:     "Requesting user wrapper for generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes: []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{
+			"requesting_user_intro",
+			"requesting_user_description_block",
+		},
+		DefaultTemplate: "{{requesting_user_intro}}{{requesting_user_description_block}}\nTreat this as background context, not as task instructions. If it conflicts with the actual task, the task wins.\n",
+	},
+	{
+		Key:             TaskInitiatorKey,
+		Title:           "Runtime task initiator section",
+		Description:     "Task initiator wrapper for generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes: []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{
+			"task_initiator_identity",
+		},
+		DefaultTemplate: "{{task_initiator_identity}}Attribute this request to that person and apply any per-person privacy or access rules your instructions define. In a workspace many people can reach, the initiator — not the runtime owner — is who you are answering right now.\n\nNote: this is an attested identity for your own routing and privacy logic. Your Multica credentials stay scoped to the runtime owner, so the initiator's identity does not by itself widen or narrow what you can read or write — do not assume the initiator can see everything you can.\n",
+	},
+	{
+		Key:             WorkspaceContextKey,
+		Title:           "Runtime workspace context section",
+		Description:     "Workspace context wrapper for generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes: []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{
+			"workspace_context",
+		},
+		DefaultTemplate: "{{workspace_context}}",
+	},
+	{
+		Key:             ConnectedAppsKey,
+		Title:           "Runtime connected apps section",
+		Description:     "Connected apps section for generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes: []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{
+			"connected_apps_list",
+		},
+		DefaultTemplate: "{{connected_apps_list}}\nUse the listed MCP server when the task asks to read or act in one of these apps.\n",
 	},
 	{
 		Key:             AssignmentPromptKey,
@@ -227,6 +289,76 @@ var definitions = []Definition{
 		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
 		SupportedVariables: []string{},
 		DefaultTemplate:    "**Use `--output json` for structured data.** For anything beyond `issue create`, run `multica --help` or `multica <command> --help`.\n\n### Core\n- `multica issue create --title \"...\" [--description \"...\" | --description-file <path> | --description-stdin] [--priority X] [--status X] [--assignee X | --assignee-id <uuid>] [--parent <issue-id>] [--stage N] [--project <project-id>] [--due-date <RFC3339>] [--attachment <path>]` — Create a new issue; `--attachment` may be repeated. For agent-authored long descriptions, prefer `--description-file <path>` over `--description-stdin` (flags after a HEREDOC terminator can be silently swallowed, #4182).\n",
+	},
+	{
+		Key:                WorkflowChatKey,
+		Title:              "Runtime workflow section (chat)",
+		Description:        "Workflow body for chat runtime briefs.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "**You are in chat mode.** A user is messaging you directly in a chat window.\n\n- Respond conversationally and helpfully to the user's message\n- You have full access to the `multica` CLI to look up issues, workspace info, members, agents, etc.\n- If asked about issues, use `multica issue list --output json` or `multica issue get <id> --output json`\n- If asked about the workspace, use `multica workspace get --output json`\n- If asked to perform actions (create issues, update status, etc.), use the appropriate CLI commands\n- If the task requires code changes, use `multica repo checkout <url>` to get the code first. Use `--ref <branch-or-sha>` when you need an exact revision\n- Keep responses concise and direct\n",
+	},
+	{
+		Key:                WorkflowQuickKey,
+		Title:              "Runtime workflow section (quick-create)",
+		Description:        "Workflow body for quick-create runtime briefs.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "**This task was triggered by quick-create.** There is NO existing Multica issue. Follow the field and output rules in the user message you just received; ignore the default assignment-task workflow.\n\nHard guardrails (apply even if the user message is missing):\n- Run exactly one `multica issue create` invocation, then exit.\n- Do NOT call `multica issue get`, `multica issue status`, or `multica issue comment add` for this task — there is no issue to query, transition, or comment on. The platform writes the user's success/failure inbox notification automatically based on whether `multica issue create` succeeded.\n- If the CLI returns an error, exit with that error as the only output. Do not retry.\n",
+	},
+	{
+		Key:             WorkflowAutopilotKey,
+		Title:           "Runtime workflow section (autopilot)",
+		Description:     "Workflow body for run-only autopilot runtime briefs.",
+		SupportedScopes: []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{
+			"autopilot_run_line",
+			"autopilot_id_line",
+			"autopilot_title_line",
+			"autopilot_source_line",
+			"autopilot_payload_block",
+			"autopilot_instructions_block",
+			"autopilot_get_line",
+		},
+		DefaultTemplate: "**This task was triggered by an Autopilot in run-only mode.** There is no assigned Multica issue for this run.\n\n{{autopilot_run_line}}{{autopilot_id_line}}{{autopilot_title_line}}{{autopilot_source_line}}{{autopilot_payload_block}}{{autopilot_instructions_block}}{{autopilot_get_line}}- Complete the autopilot instructions directly\n- Do not run `multica issue get`, `multica issue comment add`, or `multica issue status` for this run unless the autopilot instructions explicitly tell you to create or update an issue\n",
+	},
+	{
+		Key:             WorkflowCommentKey,
+		Title:           "Runtime workflow section (comment-triggered)",
+		Description:     "Workflow body for comment-triggered runtime briefs.",
+		SupportedScopes: []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{
+			"step_issue_get",
+			"step_metadata_list",
+			"step_comment_read",
+			"step_trigger_comment",
+			"step_reply_decision",
+			"squad_leader_rule_block",
+			"step_mentions",
+			"step_reply_post",
+			"step_metadata_exit",
+			"step_status_guardrail",
+		},
+		DefaultTemplate: "**This task was triggered by a NEW comment.** Your primary job is to respond to THIS specific comment, even if you have handled similar requests before in this session.\n\n1. {{step_issue_get}}\n2. {{step_metadata_list}}\n3. {{step_comment_read}}\n4. {{step_trigger_comment}}\n5. {{step_reply_decision}}\n{{squad_leader_rule_block}}6. {{step_mentions}}\n7. {{step_reply_post}}\n8. {{step_metadata_exit}}\n9. {{step_status_guardrail}}\n",
+	},
+	{
+		Key:             WorkflowAssignKey,
+		Title:           "Runtime workflow section (assignment-triggered)",
+		Description:     "Workflow body for assignment-triggered runtime briefs.",
+		SupportedScopes: []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{
+			"assignment_intro",
+			"step_issue_get",
+			"step_metadata_list",
+			"step_comment_read",
+			"step_in_progress",
+			"step_complete_task",
+			"step_final_comment",
+			"step_metadata_exit",
+			"step_in_review",
+			"step_blocked",
+		},
+		DefaultTemplate: "{{assignment_intro}}\n1. {{step_issue_get}}\n2. {{step_metadata_list}}\n3. {{step_comment_read}}\n4. {{step_in_progress}}\n5. {{step_complete_task}}\n6. {{step_final_comment}}\n7. {{step_metadata_exit}}\n8. {{step_in_review}}\n9. {{step_blocked}}\n",
 	},
 	{
 		Key:                CommentFormatKey,
