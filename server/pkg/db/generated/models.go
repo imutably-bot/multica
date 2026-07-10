@@ -937,6 +937,7 @@ type Workspace struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	Context      pgtype.Text        `json:"context"`
+	InitPrompt   pgtype.Text        `json:"init_prompt"`
 	Repos        []byte             `json:"repos"`
 	IssuePrefix  string             `json:"issue_prefix"`
 	IssueCounter int32              `json:"issue_counter"`

@@ -175,11 +175,16 @@ type Daemon struct {
 	wsHBMu      sync.RWMutex         // guards wsHBLastAck
 	wsHBLastAck map[string]time.Time // runtime_id -> last successful WS heartbeat ack timestamp
 
+	wsWriteMu sync.RWMutex
+	wsWrites  chan []byte
+
 	// reconcile fans out a "re-check server state now" signal to subscribers
 	// (watchTaskCancellation, workspaceSyncLoop) so the WS connect/reconnect
 	// path can shrink the 5s / 30s reconciliation gap to sub-second. See
 	// reconcile.go and runTaskWakeupConnection.
 	reconcile *reconcileBroadcaster
+
+	issueShells *issueShellManager
 
 	// runtimeGoneMu guards runtimeGoneInflight, reregisterNextAttempt, and
 	// reregisterLastCompletedAt. The state lets heartbeat / poller / WS-ack
@@ -272,6 +277,7 @@ func New(cfg Config, logger *slog.Logger) *Daemon {
 		cancelPollInterval:        5 * time.Second,
 		reconcile:                 newReconcileBroadcaster(),
 	}
+	d.issueShells = newIssueShellManager(d)
 	d.runner = taskRunnerFunc(d.runTask)
 	d.runUpdateFn = d.runUpdate
 	return d
@@ -3542,7 +3548,9 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		InitiatorID:                      task.InitiatorID,
 		InitiatorName:                    task.InitiatorName,
 		InitiatorEmail:                   task.InitiatorEmail,
+		WorkspaceName:                    task.WorkspaceName,
 		WorkspaceContext:                 task.WorkspaceContext,
+		WorkspaceInitPrompt:              task.WorkspaceInitPrompt,
 		ConnectedApps:                    task.ConnectedApps,
 	}
 

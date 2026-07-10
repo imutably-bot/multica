@@ -1916,8 +1916,12 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 	// shared context. Empty string when the owner hasn't set one; the daemon
 	// skips rendering the heading in that case.
 	if ws, err := h.Queries.GetWorkspace(r.Context(), parseUUID(resp.WorkspaceID)); err == nil {
+		resp.WorkspaceName = ws.Name
 		if ws.Context.Valid {
 			resp.WorkspaceContext = ws.Context.String
+		}
+		if ws.InitPrompt.Valid {
+			resp.WorkspaceInitPrompt = ws.InitPrompt.String
 		}
 	} else {
 		slog.Warn("task claim: failed to load workspace for context injection",

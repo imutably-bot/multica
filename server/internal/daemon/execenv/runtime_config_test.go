@@ -552,6 +552,68 @@ func TestWorkspaceContextHeadingSkippedWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestWorkspaceInitPromptRenderedWithVariablesAndDefaultFallback(t *testing.T) {
+	t.Parallel()
+
+	customCtx := TaskContextForEnv{
+		IssueID:             "issue-123",
+		TriggerCommentID:    "comment-456",
+		WorkspaceName:       "Acme Workspace",
+		WorkspaceInitPrompt: "Agent={{agent_name}} Workspace={{workspace_name}} Issue={{issue_id}} Chat={{chat_id}} User={{user_name}} Repo={{repo_url}} Type={{task_type}}",
+		AgentName:           "Codex",
+		InitiatorName:       "Requester",
+		RequestingUserName:  "Owner",
+		Repos:               []RepoContextForEnv{{URL: "https://github.com/acme/repo"}},
+	}
+
+	checkCustom := func(t *testing.T, label string) {
+		out := buildMetaSkillContent("claude", customCtx)
+		for _, want := range []string{
+			"## Init Prompt",
+			"Agent=Codex",
+			"Workspace=Acme Workspace",
+			"Issue=issue-123",
+			"Chat=",
+			"User=Requester",
+			"Repo=https://github.com/acme/repo",
+			"Type=comment",
+		} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("%s brief missing %q\n---\n%s", label, want, out)
+			}
+		}
+		for _, banned := range []string{"{{agent_name}}", "{{workspace_name}}", "{{issue_id}}", "{{chat_id}}", "{{user_name}}", "{{repo_url}}", "{{task_type}}"} {
+			if strings.Contains(out, banned) {
+				t.Fatalf("%s brief left template token %q unrendered\n---\n%s", label, banned, out)
+			}
+		}
+		if idx := strings.Index(out, "## Init Prompt"); idx < 0 {
+			t.Fatalf("%s brief missing init prompt heading", label)
+		}
+	}
+
+	t.Run("legacy", func(t *testing.T) { checkCustom(t, "legacy") })
+	t.Run("slim", func(t *testing.T) {
+		withSlimBrief(t)
+		checkCustom(t, "slim")
+	})
+
+	t.Run("default fallback", func(t *testing.T) {
+		out := buildMetaSkillContent("claude", TaskContextForEnv{
+			IssueID:            "issue-789",
+			WorkspaceName:      "Fallback Workspace",
+			AgentName:          "FallbackAgent",
+			RequestingUserName: "Owner",
+		})
+		if !strings.Contains(out, "You are FallbackAgent, an AI agent that helps users in Fallback Workspace.") {
+			t.Fatalf("default init prompt must render the built-in template, got:\n%s", out)
+		}
+		if !strings.Contains(out, "## Init Prompt") {
+			t.Fatalf("default init prompt should still emit the heading, got:\n%s", out)
+		}
+	})
+}
+
 func TestConnectedAppsRenderedAcrossBriefModes(t *testing.T) {
 	ctx := TaskContextForEnv{
 		IssueID:          "11111111-2222-3333-4444-555555555555",

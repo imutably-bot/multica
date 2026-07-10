@@ -31,6 +31,7 @@
       "notifications": "通知",
       "tokens": "API トークン",
       "general": "一般",
+      "agent_settings": "エージェント設定",
       "repositories": "リポジトリ",
       "github": "GitHub",
       "integrations": "連携",
@@ -167,6 +168,22 @@
     "click_logo_hint": "ロゴをクリックして新しい画像をアップロード",
     "toast_logo_updated": "ワークスペースのロゴを更新しました",
     "toast_logo_failed": "ワークスペースのロゴをアップロードできませんでした"
+  },
+  "agent_settings": {
+    "title": "エージェント設定",
+    "description": "このワークスペースのすべてのエージェントタスクに注入される短い初期プロンプトを設定します。",
+    "prompt_label": "初期プロンプト",
+    "prompt_hint": "短く保ってください。詳細な手順、長いポリシー、手順書は必要時に読み込むファイルに置いてください。",
+    "prompt_footer": "下のプロンプトはデフォルトのテンプレートです。ワークスペースごとに編集でき、新しい実行で注入されます。",
+    "supported_variables": "使用できる変数",
+    "supported_variables_hint": "プロンプト内でこれらのプレースホルダーを使えます。",
+    "help_title": "使い方",
+    "help_short": "各エージェントが作業を始める前に最初に読む短い前置きとして扱ってください。",
+    "help_files": "長いガイダンスが必要なら、リポジトリ内のファイルに置いて、タスクで必要なときだけ読み込ませてください。",
+    "save": "プロンプトを保存",
+    "saving": "保存中...",
+    "toast_saved": "エージェントプロンプトを保存しました",
+    "toast_save_failed": "エージェントプロンプトを保存できませんでした"
   },
   "delete_workspace_dialog": {
     "title": "ワークスペースを削除",

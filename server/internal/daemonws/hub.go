@@ -134,6 +134,10 @@ type MessageKindRecorder interface {
 	RecordDaemonWSMessageReceived(kind string)
 }
 
+// FrameHandler processes non-heartbeat daemon websocket frames that the server
+// wants to consume directly instead of relaying as best-effort wakeups.
+type FrameHandler func(ctx context.Context, identity ClientIdentity, msg protocol.Message)
+
 // Hub keeps daemon WebSocket connections indexed by runtime ID. Messages are
 // best-effort wakeup hints; the daemon still uses HTTP claim for correctness.
 type Hub struct {
@@ -149,6 +153,9 @@ type Hub struct {
 
 	kindMu       sync.RWMutex
 	kindRecorder MessageKindRecorder
+
+	frameMu sync.RWMutex
+	onFrame FrameHandler
 }
 
 func NewHub() *Hub {
@@ -206,6 +213,24 @@ func (h *Hub) messageKindRecorder() MessageKindRecorder {
 	h.kindMu.RLock()
 	defer h.kindMu.RUnlock()
 	return h.kindRecorder
+}
+
+func (h *Hub) SetFrameHandler(fn FrameHandler) {
+	if h == nil {
+		return
+	}
+	h.frameMu.Lock()
+	h.onFrame = fn
+	h.frameMu.Unlock()
+}
+
+func (h *Hub) frameHandler() FrameHandler {
+	if h == nil {
+		return nil
+	}
+	h.frameMu.RLock()
+	defer h.frameMu.RUnlock()
+	return h.onFrame
 }
 
 func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request, identity ClientIdentity) {
@@ -403,6 +428,18 @@ func runtimeProfilesChangedFrame(workspaceID, profileID string) ([]byte, error) 
 	})
 }
 
+func (h *Hub) SendRuntimeMessage(runtimeID string, msg protocol.Message) bool {
+	if h == nil || runtimeID == "" {
+		return false
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return false
+	}
+	delivered, _ := h.notifyFrame(runtimeID, data, "")
+	return delivered
+}
+
 func mustMarshalRaw(v any) json.RawMessage {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -543,6 +580,13 @@ func (c *client) handleFrame(raw []byte) {
 	switch msg.Type {
 	case protocol.EventDaemonHeartbeat:
 		c.handleHeartbeatFrame(msg.Payload)
+	case protocol.EventDaemonIssueShellReady,
+		protocol.EventDaemonIssueShellOutput,
+		protocol.EventDaemonIssueShellExit,
+		protocol.EventDaemonIssueShellError:
+		if handler := c.hub.frameHandler(); handler != nil {
+			handler(context.Background(), c.identity, msg)
+		}
 	default:
 		// Unknown app messages are intentionally ignored for forward
 		// compatibility with future daemon → server message types.

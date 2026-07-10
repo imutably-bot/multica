@@ -1452,6 +1452,22 @@ export class ApiClient {
     return this.fetch(`/api/issues/${issueId}/active-task`);
   }
 
+  async createIssueShellSession(
+    issueId: string,
+    agentId?: string,
+  ): Promise<{ session_id: string; state: string; work_dir?: string; error?: string }> {
+    const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return this.fetch(`/api/issues/${issueId}/shell/session${qs}`, { method: "POST" });
+  }
+
+  async getIssueShellSession(
+    issueId: string,
+    agentId?: string,
+  ): Promise<{ session_id: string; state: string; work_dir?: string; error?: string }> {
+    const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return this.fetch(`/api/issues/${issueId}/shell/session${qs}`);
+  }
+
   async listTaskMessages(taskId: string): Promise<TaskMessagePayload[]> {
     return this.fetch(`/api/tasks/${taskId}/messages`);
   }
@@ -1558,14 +1574,14 @@ export class ApiClient {
     return this.fetch(`/api/workspaces/${id}`);
   }
 
-  async createWorkspace(data: { name: string; slug: string; description?: string; context?: string }): Promise<Workspace> {
+  async createWorkspace(data: { name: string; slug: string; description?: string; context?: string; init_prompt?: string }): Promise<Workspace> {
     return this.fetch("/api/workspaces", {
       method: "POST",
       body: JSON.stringify(data),
     });
   }
 
-  async updateWorkspace(id: string, data: { name?: string; description?: string; context?: string; settings?: Record<string, unknown>; repos?: WorkspaceRepo[]; issue_prefix?: string; avatar_url?: string }): Promise<Workspace> {
+  async updateWorkspace(id: string, data: { name?: string; description?: string; context?: string; init_prompt?: string; settings?: Record<string, unknown>; repos?: WorkspaceRepo[]; issue_prefix?: string; avatar_url?: string }): Promise<Workspace> {
     return this.fetch(`/api/workspaces/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
