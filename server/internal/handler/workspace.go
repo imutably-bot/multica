@@ -40,6 +40,7 @@ type WorkspaceResponse struct {
 	Slug        string  `json:"slug"`
 	Description *string `json:"description"`
 	Context     *string `json:"context"`
+	InitPrompt  *string `json:"init_prompt"`
 	Settings    any     `json:"settings"`
 	Repos       any     `json:"repos"`
 	IssuePrefix string  `json:"issue_prefix"`
@@ -69,6 +70,7 @@ func workspaceToResponse(w db.Workspace) WorkspaceResponse {
 		Slug:        w.Slug,
 		Description: textToPtr(w.Description),
 		Context:     textToPtr(w.Context),
+		InitPrompt:  textToPtr(w.InitPrompt),
 		Settings:    settings,
 		Repos:       repos,
 		IssuePrefix: w.IssuePrefix,
@@ -244,6 +246,7 @@ type UpdateWorkspaceRequest struct {
 	Name        *string `json:"name"`
 	Description *string `json:"description"`
 	Context     *string `json:"context"`
+	InitPrompt  *string `json:"init_prompt"`
 	Settings    any     `json:"settings"`
 	Repos       any     `json:"repos"`
 	IssuePrefix *string `json:"issue_prefix"`
@@ -320,6 +323,9 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Context != nil {
 		params.Context = pgtype.Text{String: *req.Context, Valid: true}
+	}
+	if req.InitPrompt != nil {
+		params.InitPrompt = pgtype.Text{String: *req.InitPrompt, Valid: true}
 	}
 	if req.Settings != nil {
 		s, _ := json.Marshal(req.Settings)

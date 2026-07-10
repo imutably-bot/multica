@@ -31,6 +31,7 @@
       "notifications": "Notifications",
       "tokens": "API Tokens",
       "general": "General",
+      "agent_settings": "Agent settings",
       "repositories": "Repositories",
       "github": "GitHub",
       "integrations": "Integrations",
@@ -167,6 +168,22 @@
     "toast_delete_failed": "Failed to delete workspace",
     "confirm_cancel": "Cancel",
     "confirm_action": "Confirm"
+  },
+  "agent_settings": {
+    "title": "Agent settings",
+    "description": "Set the short init prompt that loads into every agent task for this workspace.",
+    "prompt_label": "Init prompt",
+    "prompt_hint": "Keep this short. Use files loaded on demand for detailed instructions, long policies, or runbooks.",
+    "prompt_footer": "The prompt below is the default template. You can edit it per workspace, and it will be injected into new runs.",
+    "supported_variables": "Supported variables",
+    "supported_variables_hint": "Use these placeholders inside the prompt.",
+    "help_title": "How to use it",
+    "help_short": "Treat this as the first few lines every agent reads before it starts work.",
+    "help_files": "If you need long-form guidance, put it in a repo file and have the agent load it only when the task needs it.",
+    "save": "Save prompt",
+    "saving": "Saving...",
+    "toast_saved": "Agent prompt saved",
+    "toast_save_failed": "Failed to save agent prompt"
   },
   "delete_workspace_dialog": {
     "title": "Delete workspace",

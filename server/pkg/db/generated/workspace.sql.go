@@ -14,7 +14,7 @@ import (
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspace (name, slug, description, context, issue_prefix)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url
+RETURNING id, name, slug, description, settings, created_at, updated_at, context, init_prompt, repos, issue_prefix, issue_counter, avatar_url
 `
 
 type CreateWorkspaceParams struct {
@@ -43,6 +43,7 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Context,
+		&i.InitPrompt,
 		&i.Repos,
 		&i.IssuePrefix,
 		&i.IssueCounter,
@@ -64,7 +65,7 @@ func (q *Queries) DeleteWorkspace(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
-SELECT id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url FROM workspace
+SELECT id, name, slug, description, settings, created_at, updated_at, context, init_prompt, repos, issue_prefix, issue_counter, avatar_url FROM workspace
 WHERE id = $1
 `
 
@@ -80,6 +81,7 @@ func (q *Queries) GetWorkspace(ctx context.Context, id pgtype.UUID) (Workspace, 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Context,
+		&i.InitPrompt,
 		&i.Repos,
 		&i.IssuePrefix,
 		&i.IssueCounter,
@@ -89,7 +91,7 @@ func (q *Queries) GetWorkspace(ctx context.Context, id pgtype.UUID) (Workspace, 
 }
 
 const getWorkspaceBySlug = `-- name: GetWorkspaceBySlug :one
-SELECT id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url FROM workspace
+SELECT id, name, slug, description, settings, created_at, updated_at, context, init_prompt, repos, issue_prefix, issue_counter, avatar_url FROM workspace
 WHERE slug = $1
 `
 
@@ -105,6 +107,7 @@ func (q *Queries) GetWorkspaceBySlug(ctx context.Context, slug string) (Workspac
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Context,
+		&i.InitPrompt,
 		&i.Repos,
 		&i.IssuePrefix,
 		&i.IssueCounter,
@@ -128,7 +131,7 @@ func (q *Queries) IncrementIssueCounter(ctx context.Context, id pgtype.UUID) (in
 
 const listWorkspaces = `-- name: ListWorkspaces :many
 SELECT w.id, w.name, w.slug, w.description, w.settings,
-       w.created_at, w.updated_at, w.context, w.repos,
+       w.created_at, w.updated_at, w.context, w.init_prompt, w.repos,
        w.issue_prefix, w.issue_counter, w.avatar_url
 FROM member m
 JOIN workspace w ON w.id = m.workspace_id
@@ -154,6 +157,7 @@ func (q *Queries) ListWorkspaces(ctx context.Context, userID pgtype.UUID) ([]Wor
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Context,
+			&i.InitPrompt,
 			&i.Repos,
 			&i.IssuePrefix,
 			&i.IssueCounter,
@@ -207,13 +211,14 @@ UPDATE workspace SET
     name = COALESCE($2, name),
     description = COALESCE($3, description),
     context = COALESCE($4, context),
-    settings = COALESCE($5, settings),
-    repos = COALESCE($6, repos),
-    issue_prefix = COALESCE($7, issue_prefix),
-    avatar_url = COALESCE($8, avatar_url),
+    init_prompt = COALESCE($5, init_prompt),
+    settings = COALESCE($6, settings),
+    repos = COALESCE($7, repos),
+    issue_prefix = COALESCE($8, issue_prefix),
+    avatar_url = COALESCE($9, avatar_url),
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url
+RETURNING id, name, slug, description, settings, created_at, updated_at, context, init_prompt, repos, issue_prefix, issue_counter, avatar_url
 `
 
 type UpdateWorkspaceParams struct {
@@ -221,6 +226,7 @@ type UpdateWorkspaceParams struct {
 	Name        pgtype.Text `json:"name"`
 	Description pgtype.Text `json:"description"`
 	Context     pgtype.Text `json:"context"`
+	InitPrompt  pgtype.Text `json:"init_prompt"`
 	Settings    []byte      `json:"settings"`
 	Repos       []byte      `json:"repos"`
 	IssuePrefix pgtype.Text `json:"issue_prefix"`
@@ -233,6 +239,7 @@ func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams
 		arg.Name,
 		arg.Description,
 		arg.Context,
+		arg.InitPrompt,
 		arg.Settings,
 		arg.Repos,
 		arg.IssuePrefix,
@@ -248,6 +255,7 @@ func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Context,
+		&i.InitPrompt,
 		&i.Repos,
 		&i.IssuePrefix,
 		&i.IssueCounter,
