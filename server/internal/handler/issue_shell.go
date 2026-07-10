@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
+	"github.com/multica-ai/multica/server/internal/prompttmpl"
 	"github.com/multica-ai/multica/server/internal/service"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
@@ -183,9 +184,10 @@ func (h *Handler) resolveIssueShellLaunch(w http.ResponseWriter, r *http.Request
 		if workspace.Context.Valid {
 			workspaceContext = workspace.Context.String
 		}
-		if workspace.InitPrompt.Valid {
-			workspaceInitPrompt = workspace.InitPrompt.String
-		}
+		workspaceInitPrompt = prompttmpl.EffectiveTemplates(
+			prompttmpl.ExtractWorkspaceOverridesFromRaw(workspace.Settings, ""),
+			nil,
+		)[prompttmpl.WorkspaceInitKey]
 	}
 
 	issuePrefix := h.getIssuePrefix(r.Context(), issue.WorkspaceID)
