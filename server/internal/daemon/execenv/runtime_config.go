@@ -416,6 +416,8 @@ func buildMetaSkillContent(provider string, ctx TaskContextForEnv) string {
 		b.WriteString("\n\n")
 	}
 
+	writeWorkspaceInitPrompt(&b, ctx)
+
 	// Requesting User block: human-supplied self-description for the user the
 	// agent is acting on behalf of, sourced from the runtime owner's profile
 	// (see handler/daemon.go). Heading is emitted ONLY when description is

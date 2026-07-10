@@ -199,23 +199,25 @@ type DaemonHeartbeatPendingLocalSkillImport struct {
 }
 
 type IssueShellOpenPayload struct {
-	SessionID      string          `json:"session_id"`
-	WorkspaceID    string          `json:"workspace_id"`
-	RuntimeID      string          `json:"runtime_id"`
-	IssueID        string          `json:"issue_id"`
-	IssueIdentifier string         `json:"issue_identifier,omitempty"`
-	IssueTitle     string          `json:"issue_title,omitempty"`
-	AgentID        string          `json:"agent_id"`
-	AgentName      string          `json:"agent_name,omitempty"`
-	Model          string          `json:"model,omitempty"`
-	ThinkingLevel  string          `json:"thinking_level,omitempty"`
-	CustomEnv      map[string]string `json:"custom_env,omitempty"`
-	CustomArgs     []string        `json:"custom_args,omitempty"`
-	McpConfig      json.RawMessage `json:"mcp_config,omitempty"`
-	RuntimeConfig  json.RawMessage `json:"runtime_config,omitempty"`
-	WorkspaceContext string        `json:"workspace_context,omitempty"`
-	PriorSessionID string          `json:"prior_session_id,omitempty"`
-	PriorWorkDir   string          `json:"prior_work_dir,omitempty"`
+	SessionID           string            `json:"session_id"`
+	WorkspaceID         string            `json:"workspace_id"`
+	RuntimeID           string            `json:"runtime_id"`
+	IssueID             string            `json:"issue_id"`
+	IssueIdentifier     string            `json:"issue_identifier,omitempty"`
+	IssueTitle          string            `json:"issue_title,omitempty"`
+	AgentID             string            `json:"agent_id"`
+	AgentName           string            `json:"agent_name,omitempty"`
+	Model               string            `json:"model,omitempty"`
+	ThinkingLevel       string            `json:"thinking_level,omitempty"`
+	CustomEnv           map[string]string `json:"custom_env,omitempty"`
+	CustomArgs          []string          `json:"custom_args,omitempty"`
+	McpConfig           json.RawMessage   `json:"mcp_config,omitempty"`
+	RuntimeConfig       json.RawMessage   `json:"runtime_config,omitempty"`
+	WorkspaceName       string            `json:"workspace_name,omitempty"`
+	WorkspaceContext    string            `json:"workspace_context,omitempty"`
+	WorkspaceInitPrompt string            `json:"workspace_init_prompt,omitempty"`
+	PriorSessionID      string            `json:"prior_session_id,omitempty"`
+	PriorWorkDir        string            `json:"prior_work_dir,omitempty"`
 }
 
 type IssueShellInputPayload struct {

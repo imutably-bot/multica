@@ -176,9 +176,15 @@ func (h *Handler) resolveIssueShellLaunch(w http.ResponseWriter, r *http.Request
 	}
 
 	workspaceContext := ""
+	workspaceName := ""
+	workspaceInitPrompt := ""
 	if workspace, err := h.Queries.GetWorkspace(r.Context(), issue.WorkspaceID); err == nil {
+		workspaceName = workspace.Name
 		if workspace.Context.Valid {
 			workspaceContext = workspace.Context.String
+		}
+		if workspace.InitPrompt.Valid {
+			workspaceInitPrompt = workspace.InitPrompt.String
 		}
 	}
 
@@ -220,23 +226,25 @@ func (h *Handler) resolveIssueShellLaunch(w http.ResponseWriter, r *http.Request
 	}
 
 	launch := service.IssueShellLaunch{
-		SessionID:        randomID(),
-		WorkspaceID:      workspaceID,
-		RuntimeID:        uuidToString(agent.RuntimeID),
-		IssueID:          uuidToString(issue.ID),
-		IssueIdentifier:  identifier,
-		IssueTitle:       issue.Title,
-		AgentID:          uuidToString(agent.ID),
-		AgentName:        agent.Name,
-		Model:            model,
-		ThinkingLevel:    thinkingLevel,
-		CustomEnv:        customEnv,
-		CustomArgs:       customArgs,
-		McpConfig:        agent.McpConfig,
-		RuntimeConfig:    agent.RuntimeConfig,
-		WorkspaceContext: workspaceContext,
-		PriorSessionID:   priorSessionID,
-		PriorWorkDir:     priorWorkDir,
+		SessionID:           randomID(),
+		WorkspaceID:         workspaceID,
+		RuntimeID:           uuidToString(agent.RuntimeID),
+		IssueID:             uuidToString(issue.ID),
+		IssueIdentifier:     identifier,
+		IssueTitle:          issue.Title,
+		AgentID:             uuidToString(agent.ID),
+		AgentName:           agent.Name,
+		Model:               model,
+		ThinkingLevel:       thinkingLevel,
+		CustomEnv:           customEnv,
+		CustomArgs:          customArgs,
+		McpConfig:           agent.McpConfig,
+		RuntimeConfig:       agent.RuntimeConfig,
+		WorkspaceName:       workspaceName,
+		WorkspaceContext:    workspaceContext,
+		WorkspaceInitPrompt: workspaceInitPrompt,
+		PriorSessionID:      priorSessionID,
+		PriorWorkDir:        priorWorkDir,
 	}
 	snapshot := service.IssueShellSnapshot{
 		SessionID: launch.SessionID,

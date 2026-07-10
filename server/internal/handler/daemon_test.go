@@ -586,18 +586,28 @@ func TestClaimTaskByRuntime_PopulatesWorkspaceContext(t *testing.T) {
 
 	ctx := context.Background()
 	const wsContext = "All comments must be in English. Prefer concise PR descriptions."
-	var prior string
-	if err := testPool.QueryRow(ctx, `SELECT COALESCE(context, '') FROM workspace WHERE id = $1`, testWorkspaceID).Scan(&prior); err != nil {
-		t.Fatalf("read workspace.context: %v", err)
+	const initPrompt = "You are {{agent_name}}, an AI agent that helps users in {{workspace_name}}."
+	var priorContext, priorInitPrompt, workspaceName string
+	if err := testPool.QueryRow(ctx, `
+		SELECT name, COALESCE(context, ''), COALESCE(init_prompt, '')
+		FROM workspace
+		WHERE id = $1
+	`, testWorkspaceID).Scan(&workspaceName, &priorContext, &priorInitPrompt); err != nil {
+		t.Fatalf("read workspace row: %v", err)
 	}
-	if _, err := testPool.Exec(ctx, `UPDATE workspace SET context = $1 WHERE id = $2`, wsContext, testWorkspaceID); err != nil {
-		t.Fatalf("set workspace.context: %v", err)
+	if _, err := testPool.Exec(ctx, `UPDATE workspace SET context = $1, init_prompt = $2 WHERE id = $3`, wsContext, initPrompt, testWorkspaceID); err != nil {
+		t.Fatalf("set workspace context/init prompt: %v", err)
 	}
 	t.Cleanup(func() {
-		if prior == "" {
+		if priorContext == "" {
 			testPool.Exec(ctx, `UPDATE workspace SET context = NULL WHERE id = $1`, testWorkspaceID)
 		} else {
-			testPool.Exec(ctx, `UPDATE workspace SET context = $1 WHERE id = $2`, prior, testWorkspaceID)
+			testPool.Exec(ctx, `UPDATE workspace SET context = $1 WHERE id = $2`, priorContext, testWorkspaceID)
+		}
+		if priorInitPrompt == "" {
+			testPool.Exec(ctx, `UPDATE workspace SET init_prompt = NULL WHERE id = $1`, testWorkspaceID)
+		} else {
+			testPool.Exec(ctx, `UPDATE workspace SET init_prompt = $1 WHERE id = $2`, priorInitPrompt, testWorkspaceID)
 		}
 	})
 
@@ -616,8 +626,10 @@ func TestClaimTaskByRuntime_PopulatesWorkspaceContext(t *testing.T) {
 
 	var resp struct {
 		Task *struct {
-			ID               string `json:"id"`
-			WorkspaceContext string `json:"workspace_context"`
+			ID                  string `json:"id"`
+			WorkspaceName       string `json:"workspace_name"`
+			WorkspaceContext    string `json:"workspace_context"`
+			WorkspaceInitPrompt string `json:"workspace_init_prompt"`
 		} `json:"task"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -629,8 +641,14 @@ func TestClaimTaskByRuntime_PopulatesWorkspaceContext(t *testing.T) {
 	if resp.Task.ID != taskID {
 		t.Fatalf("claimed task id = %s, want %s", resp.Task.ID, taskID)
 	}
+	if resp.Task.WorkspaceName != workspaceName {
+		t.Errorf("workspace_name = %q, want %q", resp.Task.WorkspaceName, workspaceName)
+	}
 	if resp.Task.WorkspaceContext != wsContext {
 		t.Errorf("workspace_context = %q, want %q", resp.Task.WorkspaceContext, wsContext)
+	}
+	if resp.Task.WorkspaceInitPrompt != initPrompt {
+		t.Errorf("workspace_init_prompt = %q, want %q", resp.Task.WorkspaceInitPrompt, initPrompt)
 	}
 }
 

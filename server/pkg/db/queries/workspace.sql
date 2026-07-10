@@ -1,6 +1,6 @@
 -- name: ListWorkspaces :many
 SELECT w.id, w.name, w.slug, w.description, w.settings,
-       w.created_at, w.updated_at, w.context, w.repos,
+       w.created_at, w.updated_at, w.context, w.init_prompt, w.repos,
        w.issue_prefix, w.issue_counter, w.avatar_url
 FROM member m
 JOIN workspace w ON w.id = m.workspace_id
@@ -25,6 +25,7 @@ UPDATE workspace SET
     name = COALESCE(sqlc.narg('name'), name),
     description = COALESCE(sqlc.narg('description'), description),
     context = COALESCE(sqlc.narg('context'), context),
+    init_prompt = COALESCE(sqlc.narg('init_prompt'), init_prompt),
     settings = COALESCE(sqlc.narg('settings'), settings),
     repos = COALESCE(sqlc.narg('repos'), repos),
     issue_prefix = COALESCE(sqlc.narg('issue_prefix'), issue_prefix),

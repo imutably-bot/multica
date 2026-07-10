@@ -16,23 +16,25 @@ const issueShellBufferLimit = 256 * 1024
 var ErrIssueShellDaemonUnavailable = errors.New("issue shell daemon unavailable")
 
 type IssueShellLaunch struct {
-	SessionID        string
-	WorkspaceID      string
-	RuntimeID        string
-	IssueID          string
-	IssueIdentifier  string
-	IssueTitle       string
-	AgentID          string
-	AgentName        string
-	Model            string
-	ThinkingLevel    string
-	CustomEnv        map[string]string
-	CustomArgs       []string
-	McpConfig        json.RawMessage
-	RuntimeConfig    json.RawMessage
-	WorkspaceContext string
-	PriorSessionID   string
-	PriorWorkDir     string
+	SessionID           string
+	WorkspaceID         string
+	RuntimeID           string
+	IssueID             string
+	IssueIdentifier     string
+	IssueTitle          string
+	AgentID             string
+	AgentName           string
+	Model               string
+	ThinkingLevel       string
+	CustomEnv           map[string]string
+	CustomArgs          []string
+	McpConfig           json.RawMessage
+	RuntimeConfig       json.RawMessage
+	WorkspaceName       string
+	WorkspaceContext    string
+	WorkspaceInitPrompt string
+	PriorSessionID      string
+	PriorWorkDir        string
 }
 
 type IssueShellSnapshot struct {
@@ -46,9 +48,9 @@ type IssueShellSnapshot struct {
 type IssueShellService struct {
 	daemonHub *daemonws.Hub
 
-	mu         sync.Mutex
-	byIssue    map[string]*issueShellSession
-	bySession  map[string]*issueShellSession
+	mu        sync.Mutex
+	byIssue   map[string]*issueShellSession
+	bySession map[string]*issueShellSession
 }
 
 type issueShellSession struct {
@@ -104,23 +106,25 @@ func (s *IssueShellService) EnsureSession(launch IssueShellLaunch) (IssueShellSn
 	if s.daemonHub == nil || !s.daemonHub.SendRuntimeMessage(launch.RuntimeID, protocol.Message{
 		Type: protocol.EventDaemonIssueShellOpen,
 		Payload: mustMarshalRaw(protocol.IssueShellOpenPayload{
-			SessionID:        launch.SessionID,
-			WorkspaceID:      launch.WorkspaceID,
-			RuntimeID:        launch.RuntimeID,
-			IssueID:          launch.IssueID,
-			IssueIdentifier:  launch.IssueIdentifier,
-			IssueTitle:       launch.IssueTitle,
-			AgentID:          launch.AgentID,
-			AgentName:        launch.AgentName,
-			Model:            launch.Model,
-			ThinkingLevel:    launch.ThinkingLevel,
-			CustomEnv:        launch.CustomEnv,
-			CustomArgs:       launch.CustomArgs,
-			McpConfig:        launch.McpConfig,
-			RuntimeConfig:    launch.RuntimeConfig,
-			WorkspaceContext: launch.WorkspaceContext,
-			PriorSessionID:   launch.PriorSessionID,
-			PriorWorkDir:     launch.PriorWorkDir,
+			SessionID:           launch.SessionID,
+			WorkspaceID:         launch.WorkspaceID,
+			RuntimeID:           launch.RuntimeID,
+			IssueID:             launch.IssueID,
+			IssueIdentifier:     launch.IssueIdentifier,
+			IssueTitle:          launch.IssueTitle,
+			AgentID:             launch.AgentID,
+			AgentName:           launch.AgentName,
+			Model:               launch.Model,
+			ThinkingLevel:       launch.ThinkingLevel,
+			CustomEnv:           launch.CustomEnv,
+			CustomArgs:          launch.CustomArgs,
+			McpConfig:           launch.McpConfig,
+			RuntimeConfig:       launch.RuntimeConfig,
+			WorkspaceName:       launch.WorkspaceName,
+			WorkspaceContext:    launch.WorkspaceContext,
+			WorkspaceInitPrompt: launch.WorkspaceInitPrompt,
+			PriorSessionID:      launch.PriorSessionID,
+			PriorWorkDir:        launch.PriorWorkDir,
 		}),
 	}) {
 		s.markFailed(launch.SessionID, ErrIssueShellDaemonUnavailable.Error())

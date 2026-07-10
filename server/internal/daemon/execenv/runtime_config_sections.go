@@ -126,6 +126,67 @@ func writeTaskInitiator(b *strings.Builder, ctx TaskContextForEnv) {
 	b.WriteString("Attribute this request to that person and apply any per-person privacy or access rules your instructions define — in a workspace many people can reach, the initiator (not the runtime owner) is who you are answering. Your Multica credentials stay scoped to the runtime owner, so this attribution does not widen what you can read or write — do not assume the initiator can see everything you can.\n\n")
 }
 
+const defaultWorkspaceInitPrompt = "You are {{agent_name}}, an AI agent that helps users in {{workspace_name}}. Be concise, helpful, and action-oriented. Use available tools when needed and ask clarifying questions if something is unclear."
+
+func taskTypeLabel(ctx TaskContextForEnv) string {
+	switch classifyTask(ctx) {
+	case kindCommentTriggered:
+		return "comment"
+	case kindAssignmentTriggered:
+		return "assignment"
+	case kindAutopilotRunOnly:
+		return "autopilot"
+	case kindQuickCreate:
+		return "quick_create"
+	case kindChat:
+		return "chat"
+	default:
+		return "unknown"
+	}
+}
+
+func firstRepoURL(ctx TaskContextForEnv) string {
+	if len(ctx.Repos) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(ctx.Repos[0].URL)
+}
+
+func renderWorkspaceInitPrompt(template string, ctx TaskContextForEnv) string {
+	return strings.NewReplacer(
+		"{{agent_name}}", sanitizeNameForBriefMarkdown(ctx.AgentName),
+		"{{workspace_name}}", sanitizeNameForBriefMarkdown(ctx.WorkspaceName),
+		"{{issue_id}}", sanitizeBriefCodeToken(ctx.IssueID),
+		"{{chat_id}}", sanitizeBriefCodeToken(ctx.ChatSessionID),
+		"{{user_name}}", func() string {
+			if name := sanitizeNameForBriefMarkdown(ctx.InitiatorName); name != "" {
+				return name
+			}
+			return sanitizeNameForBriefMarkdown(ctx.RequestingUserName)
+		}(),
+		"{{repo_url}}", sanitizeNameForBriefMarkdown(firstRepoURL(ctx)),
+		"{{task_type}}", sanitizeBriefCodeToken(taskTypeLabel(ctx)),
+	).Replace(template)
+}
+
+// writeWorkspaceInitPrompt emits the short workspace-level init prompt
+// configured by the workspace owner. Trailing whitespace is stripped and the
+// default prompt is rendered when the workspace setting is empty so old
+// workspaces inherit the built-in copy without a migration.
+func writeWorkspaceInitPrompt(b *strings.Builder, ctx TaskContextForEnv) {
+	template := strings.TrimSpace(ctx.WorkspaceInitPrompt)
+	if template == "" {
+		template = defaultWorkspaceInitPrompt
+	}
+	rendered := strings.TrimSpace(renderWorkspaceInitPrompt(template, ctx))
+	if rendered == "" {
+		return
+	}
+	b.WriteString("## Init Prompt\n\n")
+	b.WriteString(rendered)
+	b.WriteString("\n\n")
+}
+
 // writeWorkspaceContext emits the workspace-level system prompt configured
 // by the workspace owner. Trailing whitespace is stripped.
 func writeWorkspaceContext(b *strings.Builder, ctx TaskContextForEnv) {
@@ -509,7 +570,7 @@ func writeOutput(b *strings.Builder, kind taskKind, ctx TaskContextForEnv) {
 //	Attachments           |    ✓    |   ✓    |     —     |      —       |  —
 //
 // Always-on rows — Header, Background Task Safety, Agent Identity,
-// Requesting User, Task Initiator, Workspace Context, Connected Apps,
+// Workspace Init Prompt, Requesting User, Task Initiator, Workspace Context, Connected Apps,
 // Workflow, Always Use CLI, Output — are shared by every kind and emitted
 // unconditionally (or gated by their own data preconditions).
 func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
@@ -519,6 +580,7 @@ func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
 	writeHeader(&b)
 	writeBackgroundTaskSafetySlim(&b)
 	writeAgentIdentity(&b, ctx)
+	writeWorkspaceInitPrompt(&b, ctx)
 	writeRequestingUser(&b, ctx)
 	writeTaskInitiator(&b, ctx)
 	writeWorkspaceContext(&b, ctx)

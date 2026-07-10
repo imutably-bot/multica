@@ -31,6 +31,7 @@
       "notifications": "通知",
       "tokens": "API Token",
       "general": "通用",
+      "agent_settings": "智能体设置",
       "repositories": "代码仓库",
       "github": "GitHub",
       "integrations": "集成",
@@ -167,6 +168,22 @@
     "toast_delete_failed": "删除工作区失败",
     "confirm_cancel": "取消",
     "confirm_action": "确认"
+  },
+  "agent_settings": {
+    "title": "智能体设置",
+    "description": "为该工作区设置会注入到每个智能体任务中的简短初始化提示。",
+    "prompt_label": "初始化提示",
+    "prompt_hint": "保持简短。更详细的说明、长篇规则或操作手册应放在按需加载的文件里。",
+    "prompt_footer": "下面的提示是默认模板。你可以按工作区编辑它，新任务会使用这里的内容。",
+    "supported_variables": "支持的变量",
+    "supported_variables_hint": "可在提示中使用这些占位符。",
+    "help_title": "使用方式",
+    "help_short": "把它当成每个智能体开始工作前先读到的前几行。",
+    "help_files": "如果需要长篇指引，请把它放到仓库文件中，只在任务需要时让智能体加载。",
+    "save": "保存提示",
+    "saving": "保存中...",
+    "toast_saved": "已保存智能体提示",
+    "toast_save_failed": "保存智能体提示失败"
   },
   "delete_workspace_dialog": {
     "title": "删除工作区",

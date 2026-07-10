@@ -11,6 +11,7 @@ export interface Workspace {
   slug: string;
   description: string | null;
   context: string | null;
+  init_prompt?: string | null;
   settings: Record<string, unknown>;
   repos: WorkspaceRepo[];
   issue_prefix: string;

@@ -24,14 +24,14 @@ type issueShellManager struct {
 }
 
 type issueShellSession struct {
-	id       string
+	id        string
 	runtimeID string
-	provider string
-	cmd      *exec.Cmd
-	ptyFile  *os.File
-	cancel   context.CancelFunc
-	env      *execenv.Environment
-	cleanup  func()
+	provider  string
+	cmd       *exec.Cmd
+	ptyFile   *os.File
+	cancel    context.CancelFunc
+	env       *execenv.Environment
+	cleanup   func()
 }
 
 func newIssueShellManager(d *Daemon) *issueShellManager {
@@ -141,7 +141,9 @@ func (m *issueShellManager) buildCommand(payload protocol.IssueShellOpenPayload)
 		IssueID:             payload.IssueID,
 		AgentID:             payload.AgentID,
 		AgentName:           payload.AgentName,
+		WorkspaceName:       payload.WorkspaceName,
 		WorkspaceContext:    payload.WorkspaceContext,
+		WorkspaceInitPrompt: payload.WorkspaceInitPrompt,
 		PriorSessionResumed: payload.PriorSessionID != "",
 	}
 
