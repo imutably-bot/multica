@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/multica-ai/multica/server/internal/prompttmpl"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
 )
 
@@ -261,6 +262,44 @@ func TestCommentTriggeredBriefResumedNoDeltaSkipsDefaultThreadRead(t *testing.T)
 	}
 	if strings.Contains(out, "Read the triggering conversation first") {
 		t.Errorf("resumed/no-delta brief must not use the cold-start forced-read wording, got:\n%s", out)
+	}
+}
+
+func TestRuntimeBriefUsesCustomSectionTemplates(t *testing.T) {
+	t.Parallel()
+
+	out := buildMetaSkillContent("claude", TaskContextForEnv{
+		IssueID:                          "11111111-2222-3333-4444-555555555555",
+		AgentName:                        "CustomAgent",
+		AgentInstructions:                "Follow local policy.",
+		RequestingUserName:               "Taylor",
+		RequestingUserProfileDescription: "prefers short updates",
+		ConnectedApps: []runtimeapps.ConnectedApp{
+			{ToolkitName: "GitHub", ToolkitSlug: "github", ServerName: "mcp-github"},
+		},
+		PromptTemplates: map[string]string{
+			prompttmpl.AgentIdentityKey:  "Agent block override\n{{agent_name_block}}{{agent_instructions_block}}",
+			prompttmpl.RequestingUserKey: "Requesting user override\n{{requesting_user_intro}}{{requesting_user_description_block}}",
+			prompttmpl.ConnectedAppsKey:  "Connected apps override\n{{connected_apps_list}}",
+			prompttmpl.WorkflowAssignKey: "Assignment override\n1. {{step_issue_get}}\n6. {{step_final_comment}}\n",
+		},
+	})
+
+	for _, want := range []string{
+		"Agent block override",
+		"Requesting user override",
+		"Connected apps override",
+		"Assignment override",
+		"**You are: CustomAgent**",
+		"Follow local policy.",
+		"> prefers short updates",
+		"- GitHub (`github`) via MCP server `mcp-github`",
+		"Run `multica issue get 11111111-2222-3333-4444-555555555555 --output json` to understand your task",
+		"`multica issue comment add 11111111-2222-3333-4444-555555555555`",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected custom runtime brief to contain %q\n\n%s", want, out)
+		}
 	}
 }
 
