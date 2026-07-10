@@ -36,6 +36,7 @@ const (
 	WorkflowCommentKey   = "runtime_workflow_comment"
 	WorkflowAssignKey    = "runtime_workflow_assignment"
 	CommentFormatKey     = "runtime_comment_formatting"
+	CommentFormatWinKey  = "runtime_comment_formatting_windows"
 	RepositoriesKey      = "runtime_repositories"
 	ProjectContextKey    = "runtime_project_context"
 	SubIssueCreateKey    = "runtime_sub_issue_creation"
@@ -369,6 +370,14 @@ var definitions = []Definition{
 		DefaultTemplate:    "For issue comments, **always write the comment body to a UTF-8 file with your file-write tool first, then post it with `--content-file <path>`**. Never use inline `--content` for agent-authored comments — the shell rewrites backticks / `$()` / quotes in the body (MUL-2904). Never use `--content-stdin` with a HEREDOC alongside other flags either — the heredoc/flag boundary is fragile and flags get silently swallowed (#4182). Keep the same `--parent` value from the trigger comment when replying. Delete the temp file (`rm ./reply.md`) after posting; do not rely on `\\n` escapes.\n",
 	},
 	{
+		Key:                CommentFormatWinKey,
+		Title:              "Runtime comment formatting section (Windows)",
+		Description:        "Windows-specific comment-posting guardrails shown in generated CLAUDE.md / AGENTS.md.",
+		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
+		SupportedVariables: []string{},
+		DefaultTemplate:    "On Windows, **always write the comment body to a UTF-8 file with your file-write tool first, then post it with `--content-file <path>`** — do NOT pipe via `--content-stdin` (PowerShell 5.1's `$OutputEncoding` defaults to ASCIIEncoding when piping to a native command, silently dropping non-ASCII characters as `?` before they reach `multica.exe`). Never use inline `--content` for agent-authored comments. Keep the same `--parent` value from the trigger comment when replying. Delete the temp file (`Remove-Item ./reply.md`) after posting; do not rely on `\\n` escapes.\n",
+	},
+	{
 		Key:                RepositoriesKey,
 		Title:              "Runtime repositories section",
 		Description:        "Repository list block for generated CLAUDE.md / AGENTS.md.",
@@ -381,8 +390,8 @@ var definitions = []Definition{
 		Title:              "Runtime project context section",
 		Description:        "Project context block for generated CLAUDE.md / AGENTS.md.",
 		SupportedScopes:    []Scope{ScopeWorkspace, ScopeAgent},
-		SupportedVariables: []string{"project_title_block", "project_description_block", "project_resources_block"},
-		DefaultTemplate:    "{{project_title_block}}{{project_description_block}}{{project_resources_block}}",
+		SupportedVariables: []string{"project_title_block", "project_description_block", "project_resources_intro_block", "project_resources_list_block", "project_resources_outro_block"},
+		DefaultTemplate:    "{{project_title_block}}{{project_description_block}}{{project_resources_intro_block}}{{project_resources_list_block}}{{project_resources_outro_block}}",
 	},
 	{
 		Key:                InstructionPrecKey,
