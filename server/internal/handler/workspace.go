@@ -13,12 +13,28 @@ import (
 	"github.com/multica-ai/multica/server/internal/analytics"
 	"github.com/multica-ai/multica/server/internal/logger"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
+	"github.com/multica-ai/multica/server/internal/prompttmpl"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 var nonAlpha = regexp.MustCompile(`[^a-zA-Z]`)
 var workspaceSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
+func stringToPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func workspaceInitPromptFromSettings(settings []byte) *string {
+	overrides := prompttmpl.ExtractWorkspaceOverridesFromRaw(settings, "")
+	if prompt := strings.TrimSpace(overrides[prompttmpl.WorkspaceInitKey]); prompt != "" {
+		return &prompt
+	}
+	return nil
+}
 
 // generateIssuePrefix produces a 2-5 char uppercase prefix from a workspace name.
 // Examples: "Jiayuan's Workspace" → "JIA", "My Team" → "MYT", "AB" → "AB".
@@ -70,7 +86,7 @@ func workspaceToResponse(w db.Workspace) WorkspaceResponse {
 		Slug:        w.Slug,
 		Description: textToPtr(w.Description),
 		Context:     textToPtr(w.Context),
-		InitPrompt:  textToPtr(w.InitPrompt),
+		InitPrompt:  workspaceInitPromptFromSettings(w.Settings),
 		Settings:    settings,
 		Repos:       repos,
 		IssuePrefix: w.IssuePrefix,
@@ -98,6 +114,23 @@ func memberToResponse(m db.Member) MemberResponse {
 	}
 }
 
+func listWorkspaceRowToWorkspace(ws db.ListWorkspacesRow) db.Workspace {
+	return db.Workspace{
+		ID:           ws.ID,
+		Name:         ws.Name,
+		Slug:         ws.Slug,
+		Description:  ws.Description,
+		Settings:     ws.Settings,
+		CreatedAt:    ws.CreatedAt,
+		UpdatedAt:    ws.UpdatedAt,
+		Context:      ws.Context,
+		Repos:        ws.Repos,
+		IssuePrefix:  ws.IssuePrefix,
+		IssueCounter: ws.IssueCounter,
+		AvatarUrl:    ws.AvatarUrl,
+	}
+}
+
 func (h *Handler) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requireUserID(w, r)
 	if !ok {
@@ -112,7 +145,7 @@ func (h *Handler) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
 
 	resp := make([]WorkspaceResponse, len(workspaces))
 	for i, ws := range workspaces {
-		resp[i] = workspaceToResponse(ws)
+		resp[i] = workspaceToResponse(listWorkspaceRowToWorkspace(ws))
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -324,12 +357,58 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	if req.Context != nil {
 		params.Context = pgtype.Text{String: *req.Context, Valid: true}
 	}
-	if req.InitPrompt != nil {
-		params.InitPrompt = pgtype.Text{String: *req.InitPrompt, Valid: true}
-	}
-	if req.Settings != nil {
-		s, _ := json.Marshal(req.Settings)
-		params.Settings = s
+	if req.Settings != nil || req.InitPrompt != nil {
+		var settingsObj map[string]any
+		if req.Settings != nil {
+			rawSettings, err := json.Marshal(req.Settings)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "settings must be valid JSON")
+				return
+			}
+			if err := json.Unmarshal(rawSettings, &settingsObj); err != nil || settingsObj == nil {
+				writeError(w, http.StatusBadRequest, "settings must be a JSON object")
+				return
+			}
+		} else {
+			current, err := h.Queries.GetWorkspace(r.Context(), idUUID)
+			if err != nil {
+				writeError(w, http.StatusNotFound, "workspace not found")
+				return
+			}
+			if len(current.Settings) > 0 {
+				_ = json.Unmarshal(current.Settings, &settingsObj)
+			}
+			if settingsObj == nil {
+				settingsObj = map[string]any{}
+			}
+		}
+		if req.InitPrompt != nil {
+			rawTemplates := settingsObj["prompt_templates"]
+			templates, _ := rawTemplates.(map[string]any)
+			if templates == nil {
+				templates = map[string]any{}
+			}
+			if strings.TrimSpace(*req.InitPrompt) == "" {
+				delete(templates, prompttmpl.WorkspaceInitKey)
+			} else {
+				templates[prompttmpl.WorkspaceInitKey] = *req.InitPrompt
+			}
+			if len(templates) == 0 {
+				delete(settingsObj, "prompt_templates")
+			} else {
+				settingsObj["prompt_templates"] = templates
+			}
+		}
+		if err := prompttmpl.ValidateOverridesFromObject(settingsObj, prompttmpl.ScopeWorkspace); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		rawSettings, err := json.Marshal(settingsObj)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "settings must be valid JSON")
+			return
+		}
+		params.Settings = rawSettings
 	}
 	if req.Repos != nil {
 		reposJSON, err := validateAndNormalizeWorkspaceRepos(req.Repos)

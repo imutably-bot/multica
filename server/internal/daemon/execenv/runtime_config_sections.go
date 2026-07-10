@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/multica-ai/multica/server/internal/prompttmpl"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
 )
 
@@ -126,8 +127,6 @@ func writeTaskInitiator(b *strings.Builder, ctx TaskContextForEnv) {
 	b.WriteString("Attribute this request to that person and apply any per-person privacy or access rules your instructions define — in a workspace many people can reach, the initiator (not the runtime owner) is who you are answering. Your Multica credentials stay scoped to the runtime owner, so this attribution does not widen what you can read or write — do not assume the initiator can see everything you can.\n\n")
 }
 
-const defaultWorkspaceInitPrompt = "You are {{agent_name}}, an AI agent that helps users in {{workspace_name}}. Be concise, helpful, and action-oriented. Use available tools when needed and ask clarifying questions if something is unclear."
-
 func taskTypeLabel(ctx TaskContextForEnv) string {
 	switch classifyTask(ctx) {
 	case kindCommentTriggered:
@@ -175,8 +174,11 @@ func renderWorkspaceInitPrompt(template string, ctx TaskContextForEnv) string {
 // workspaces inherit the built-in copy without a migration.
 func writeWorkspaceInitPrompt(b *strings.Builder, ctx TaskContextForEnv) {
 	template := strings.TrimSpace(ctx.WorkspaceInitPrompt)
+	if template == "" && ctx.PromptTemplates != nil {
+		template = strings.TrimSpace(ctx.PromptTemplates[prompttmpl.WorkspaceInitKey])
+	}
 	if template == "" {
-		template = defaultWorkspaceInitPrompt
+		template = prompttmpl.DefaultTemplate(prompttmpl.WorkspaceInitKey)
 	}
 	rendered := strings.TrimSpace(renderWorkspaceInitPrompt(template, ctx))
 	if rendered == "" {
@@ -423,11 +425,11 @@ func writeWorkflowComment(b *strings.Builder, provider string, ctx TaskContextFo
 	b.WriteString("**This task was triggered by a NEW comment.** Your primary job is to respond to THIS specific comment, even if you have handled similar requests before in this session.\n\n")
 	fmt.Fprintf(b, "1. Run `multica issue get %s --output json` to understand the issue context\n", ctx.IssueID)
 	fmt.Fprintf(b, "2. Run `multica issue metadata list %s --output json` to see what prior agents pinned — best-effort, empty `{}` and CLI failures are normal. See the `## Issue Metadata` section above for what to look for.\n", ctx.IssueID)
-	if hint := BuildNewCommentsHint(ctx.IssueID, ctx.TriggerCommentID, ctx.TriggerThreadID, ctx.NewCommentsSince, ctx.NewCommentCount); hint != "" {
+	if hint := BuildNewCommentsHint(ctx.PromptTemplates, ctx.IssueID, ctx.TriggerCommentID, ctx.TriggerThreadID, ctx.NewCommentsSince, ctx.NewCommentCount); hint != "" {
 		b.WriteString("3. " + hint)
 	} else if ctx.PriorSessionResumed {
-		b.WriteString("3. " + BuildResumedCommentsHint(ctx.IssueID, ctx.TriggerCommentID, ctx.TriggerThreadID))
-	} else if cold := BuildColdCommentsHint(ctx.IssueID, ctx.TriggerCommentID, ctx.TriggerThreadID); cold != "" {
+		b.WriteString("3. " + BuildResumedCommentsHint(ctx.PromptTemplates, ctx.IssueID, ctx.TriggerCommentID, ctx.TriggerThreadID))
+	} else if cold := BuildColdCommentsHint(ctx.PromptTemplates, ctx.IssueID, ctx.TriggerCommentID, ctx.TriggerThreadID); cold != "" {
 		b.WriteString("3. " + cold)
 	} else {
 		fmt.Fprintf(b, "3. Catch up on comments — read with `multica issue comment list %s --recent 10 --output json` (resolved threads come back folded — `--full` to expand).\n", ctx.IssueID)
@@ -441,7 +443,7 @@ func writeWorkflowComment(b *strings.Builder, provider string, ctx TaskContextFo
 	}
 	b.WriteString("6. If a reply IS warranted: do any requested work first, then **decide whether to include any `@mention` link.** The default is NO mention. Only mention when you are escalating to a human owner who is not yet involved, delegating a concrete new sub-task to another agent for the first time, or the user explicitly asked you to loop someone in. Never @mention the agent you are replying to as a thank-you or sign-off.\n")
 	b.WriteString("7. **If you reply, post it as a comment — this step is mandatory when you reply.** Text in your terminal or run logs is NOT delivered to the user. ")
-	b.WriteString(buildCommentReplyInstructionsSlim(provider, ctx.IssueID, ctx.TriggerCommentID))
+	b.WriteString(buildCommentReplyInstructionsSlim(provider, ctx.PromptTemplates, ctx.IssueID, ctx.TriggerCommentID))
 	b.WriteString("8. Before exiting: only if this run produced a fact that clears the high bar (important AND likely to be re-read by future runs on this same issue, e.g. a new PR URL or deploy URL), or you noticed a metadata key from entry that is now stale, pin or clear it via `multica issue metadata set`/`delete`. Most runs write nothing here — that is the expected outcome, not a gap. When in doubt, do not write. See the `## Issue Metadata` section above for the full bar.\n")
 	b.WriteString("9. Do NOT change the issue status unless the comment explicitly asks for it\n\n")
 }

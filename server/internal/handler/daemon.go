@@ -23,6 +23,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/middleware"
+	"github.com/multica-ai/multica/server/internal/prompttmpl"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -1920,8 +1921,17 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 		if ws.Context.Valid {
 			resp.WorkspaceContext = ws.Context.String
 		}
-		if ws.InitPrompt.Valid {
-			resp.WorkspaceInitPrompt = ws.InitPrompt.String
+		resp.WorkspaceInitPrompt = prompttmpl.EffectiveTemplates(
+			prompttmpl.ExtractWorkspaceOverridesFromRaw(ws.Settings, ""),
+			nil,
+		)[prompttmpl.WorkspaceInitKey]
+		if resp.Agent != nil {
+			resp.PromptTemplates = effectivePromptTemplates(ws, db.Agent{RuntimeConfig: resp.Agent.RuntimeConfig})
+		} else {
+			resp.PromptTemplates = prompttmpl.EffectiveTemplates(
+				prompttmpl.ExtractWorkspaceOverridesFromRaw(ws.Settings, ""),
+				map[string]string{},
+			)
 		}
 	} else {
 		slog.Warn("task claim: failed to load workspace for context injection",

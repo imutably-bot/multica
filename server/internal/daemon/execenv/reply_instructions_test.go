@@ -26,7 +26,7 @@ func TestBuildCommentReplyInstructionsCodexLinux(t *testing.T) {
 	issueID := "11111111-1111-1111-1111-111111111111"
 	triggerID := "22222222-2222-2222-2222-222222222222"
 
-	got := BuildCommentReplyInstructions("codex", issueID, triggerID)
+	got := BuildCommentReplyInstructions("codex", nil, issueID, triggerID)
 
 	for _, want := range []string{
 		"multica issue comment add " + issueID + " --parent " + triggerID + " --content-file ./reply.md",
@@ -82,7 +82,7 @@ func TestBuildCommentReplyInstructionsNonCodexLinux(t *testing.T) {
 			name := provider + "/" + host
 			t.Run(name, func(t *testing.T) {
 				runtimeGOOS = host
-				got := BuildCommentReplyInstructions(provider, issueID, triggerID)
+				got := BuildCommentReplyInstructions(provider, nil, issueID, triggerID)
 
 				for _, want := range []string{
 					"multica issue comment add " + issueID + " --parent " + triggerID + " --content-file ./reply.md",
@@ -135,7 +135,7 @@ func TestBuildCommentReplyInstructionsWindowsUsesContentFile(t *testing.T) {
 
 	for _, provider := range []string{"codex", "claude", "opencode", "openclaw", "hermes", "kimi", "kiro", "cursor"} {
 		t.Run(provider+"/windows", func(t *testing.T) {
-			got := BuildCommentReplyInstructions(provider, issueID, triggerID)
+			got := BuildCommentReplyInstructions(provider, nil, issueID, triggerID)
 			for _, want := range []string{
 				"multica issue comment add " + issueID + " --parent " + triggerID + " --content-file",
 				"On Windows, write the reply body to a UTF-8 file",
@@ -164,7 +164,7 @@ func TestBuildCommentReplyInstructionsEmptyWhenNoTrigger(t *testing.T) {
 	t.Parallel()
 
 	for _, provider := range []string{"codex", "claude", "opencode"} {
-		if got := BuildCommentReplyInstructions(provider, "issue-id", ""); got != "" {
+		if got := BuildCommentReplyInstructions(provider, nil, "issue-id", ""); got != "" {
 			t.Fatalf("expected empty string when triggerCommentID is empty for %s, got %q", provider, got)
 		}
 	}

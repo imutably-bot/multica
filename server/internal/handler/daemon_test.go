@@ -587,16 +587,25 @@ func TestClaimTaskByRuntime_PopulatesWorkspaceContext(t *testing.T) {
 	ctx := context.Background()
 	const wsContext = "All comments must be in English. Prefer concise PR descriptions."
 	const initPrompt = "You are {{agent_name}}, an AI agent that helps users in {{workspace_name}}."
-	var priorContext, priorInitPrompt, workspaceName string
+	var priorContext, workspaceName string
+	var priorSettings []byte
 	if err := testPool.QueryRow(ctx, `
-		SELECT name, COALESCE(context, ''), COALESCE(init_prompt, '')
+		SELECT name, COALESCE(context, ''), COALESCE(settings, '{}'::jsonb)
 		FROM workspace
 		WHERE id = $1
-	`, testWorkspaceID).Scan(&workspaceName, &priorContext, &priorInitPrompt); err != nil {
+	`, testWorkspaceID).Scan(&workspaceName, &priorContext, &priorSettings); err != nil {
 		t.Fatalf("read workspace row: %v", err)
 	}
-	if _, err := testPool.Exec(ctx, `UPDATE workspace SET context = $1, init_prompt = $2 WHERE id = $3`, wsContext, initPrompt, testWorkspaceID); err != nil {
-		t.Fatalf("set workspace context/init prompt: %v", err)
+	settingsJSON, err := json.Marshal(map[string]any{
+		"prompt_templates": map[string]any{
+			"workspace_init": initPrompt,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal settings: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, `UPDATE workspace SET context = $1, settings = $2 WHERE id = $3`, wsContext, settingsJSON, testWorkspaceID); err != nil {
+		t.Fatalf("set workspace context/settings: %v", err)
 	}
 	t.Cleanup(func() {
 		if priorContext == "" {
@@ -604,11 +613,7 @@ func TestClaimTaskByRuntime_PopulatesWorkspaceContext(t *testing.T) {
 		} else {
 			testPool.Exec(ctx, `UPDATE workspace SET context = $1 WHERE id = $2`, priorContext, testWorkspaceID)
 		}
-		if priorInitPrompt == "" {
-			testPool.Exec(ctx, `UPDATE workspace SET init_prompt = NULL WHERE id = $1`, testWorkspaceID)
-		} else {
-			testPool.Exec(ctx, `UPDATE workspace SET init_prompt = $1 WHERE id = $2`, priorInitPrompt, testWorkspaceID)
-		}
+		testPool.Exec(ctx, `UPDATE workspace SET settings = $1 WHERE id = $2`, priorSettings, testWorkspaceID)
 	})
 
 	runtimeID := createClaimReclaimRuntime(t, ctx, "Workspace context claim runtime")
