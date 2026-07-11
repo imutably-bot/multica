@@ -993,6 +993,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Get("/active-task", h.GetActiveTaskForIssue)
 					r.Post("/shell/session", h.CreateIssueShellSession)
 					r.Get("/shell/session", h.GetIssueShellSession)
+					r.Get("/shell/command", h.GetIssueShellCommand)
 					r.Get("/shell/ws", h.IssueShellWebSocket)
 					r.Post("/tasks/{taskId}/cancel", h.CancelTask)
 					r.Post("/rerun", h.RerunIssue)

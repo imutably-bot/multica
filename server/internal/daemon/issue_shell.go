@@ -248,47 +248,13 @@ func (m *issueShellManager) buildCommand(payload protocol.IssueShellOpenPayload)
 }
 
 func buildInteractiveShellArgs(provider string, payload protocol.IssueShellOpenPayload, workDir string, extraArgs []string) ([]string, error) {
-	args := append([]string{}, extraArgs...)
-	switch provider {
-	case "claude", "codebuddy":
-		if payload.Model != "" {
-			args = append(args, "--model", payload.Model)
-		}
-		if payload.ThinkingLevel != "" {
-			args = append(args, "--effort", payload.ThinkingLevel)
-		}
-		if payload.IssueIdentifier != "" {
-			args = append(args, "--name", payload.IssueIdentifier)
-		}
-		if payload.PriorSessionID != "" {
-			args = append(args, "--resume", payload.PriorSessionID)
-		}
-		args = append(args, payload.CustomArgs...)
-		return args, nil
-	case "codex":
-		if payload.PriorSessionID != "" {
-			args = append([]string{"resume", payload.PriorSessionID}, args...)
-		}
-		args = append(args, "--no-alt-screen", "-C", workDir)
-		if payload.Model != "" {
-			args = append(args, "--model", payload.Model)
-		}
-		args = append(args, payload.CustomArgs...)
-		return args, nil
-	case "hermes":
-		// "chat" subcommand must come before all flags for interactive use.
-		hermesArgs := append([]string{"chat"}, args...)
-		if payload.Model != "" {
-			hermesArgs = append(hermesArgs, "--model", payload.Model)
-		}
-		if payload.PriorSessionID != "" {
-			hermesArgs = append(hermesArgs, "--resume", payload.PriorSessionID)
-		}
-		hermesArgs = append(hermesArgs, payload.CustomArgs...)
-		return hermesArgs, nil
-	default:
-		return nil, fmt.Errorf("provider %q does not support issue shell yet", provider)
-	}
+	return protocol.BuildInteractiveShellArgs(provider, protocol.ShellArgsInput{
+		Model:           payload.Model,
+		ThinkingLevel:   payload.ThinkingLevel,
+		IssueIdentifier: payload.IssueIdentifier,
+		PriorSessionID:  payload.PriorSessionID,
+		CustomArgs:      payload.CustomArgs,
+	}, workDir, extraArgs)
 }
 
 func (m *issueShellManager) streamOutput(session *issueShellSession) {

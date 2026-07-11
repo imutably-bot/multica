@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
 	"github.com/multica-ai/multica/server/internal/service"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 var issueShellUpgrader = websocket.Upgrader{
@@ -28,6 +30,15 @@ type browserIssueShellMessage struct {
 	Data string `json:"data,omitempty"`
 	Cols int    `json:"cols,omitempty"`
 	Rows int    `json:"rows,omitempty"`
+}
+
+type IssueShellCommandResponse struct {
+	// Command the user can paste into their own terminal to reach the
+	// same session as the issue shell — but only from the machine
+	// hosting the agent's runtime daemon, since that's where the
+	// provider CLI and work directory actually live.
+	Command string `json:"command"`
+	WorkDir string `json:"work_dir,omitempty"`
 }
 
 func (h *Handler) CreateIssueShellSession(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +82,60 @@ func (h *Handler) GetIssueShellSession(w http.ResponseWriter, r *http.Request) {
 		WorkDir:   snapshot.WorkDir,
 		Error:     snapshot.Error,
 	})
+}
+
+// GetIssueShellCommand renders — but never runs — the command that would
+// open this issue's shell session, so the user can copy it into a
+// terminal on the machine hosting the agent's runtime daemon. It reuses
+// protocol.BuildInteractiveShellArgs, the same arg-composition the daemon
+// uses to actually launch the session, so the two never drift apart.
+//
+// This is a same-machine command only: the server has no reachable
+// network address for a runtime (the daemon only holds an outbound
+// websocket to the server), so there is no way to compose a working SSH
+// command from here.
+func (h *Handler) GetIssueShellCommand(w http.ResponseWriter, r *http.Request) {
+	launch, _, ok := h.resolveIssueShellLaunch(w, r)
+	if !ok {
+		return
+	}
+
+	cliName, ok := protocol.ProviderCLIName(launch.Provider)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "provider does not support issue shell yet")
+		return
+	}
+
+	args, err := protocol.BuildInteractiveShellArgs(launch.Provider, protocol.ShellArgsInput{
+		Model:           launch.Model,
+		ThinkingLevel:   launch.ThinkingLevel,
+		IssueIdentifier: launch.IssueIdentifier,
+		PriorSessionID:  launch.PriorSessionID,
+		CustomArgs:      launch.CustomArgs,
+	}, launch.PriorWorkDir, nil)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	command := shellQuote(cliName)
+	for _, arg := range args {
+		command += " " + shellQuote(arg)
+	}
+	if launch.PriorWorkDir != "" {
+		command = "cd " + shellQuote(launch.PriorWorkDir) + " && " + command
+	}
+
+	writeJSON(w, http.StatusOK, IssueShellCommandResponse{
+		Command: command,
+		WorkDir: launch.PriorWorkDir,
+	})
+}
+
+// shellQuote wraps a value in single quotes for safe use in a POSIX
+// shell command line, escaping any embedded single quotes.
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
 func (h *Handler) IssueShellWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -175,6 +240,12 @@ func (h *Handler) resolveIssueShellLaunch(w http.ResponseWriter, r *http.Request
 		return service.IssueShellLaunch{}, service.IssueShellSnapshot{}, false
 	}
 
+	runtime, err := h.Queries.GetAgentRuntime(r.Context(), agent.RuntimeID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load agent runtime")
+		return service.IssueShellLaunch{}, service.IssueShellSnapshot{}, false
+	}
+
 	workspaceContext := ""
 	workspaceName := ""
 	workspaceInitPrompt := ""
@@ -234,6 +305,7 @@ func (h *Handler) resolveIssueShellLaunch(w http.ResponseWriter, r *http.Request
 		IssueTitle:          issue.Title,
 		AgentID:             uuidToString(agent.ID),
 		AgentName:           agent.Name,
+		Provider:            runtime.Provider,
 		Model:               model,
 		ThinkingLevel:       thinkingLevel,
 		CustomEnv:           customEnv,

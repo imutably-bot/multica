@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleCheck,
+  Copy,
   Milestone,
   MoreHorizontal,
   PanelRight,
@@ -98,12 +99,58 @@ import {
   useAnimatedRightSidebarState,
 } from "../../layout/animated-right-sidebar";
 
+// Copies the command that would open the given agent's issue shell
+// session — same-machine only (see api.getIssueShellCommand) — so the
+// user can paste it into a terminal on the runtime's host instead of
+// using the browser shell.
+async function copyIssueShellCommand(issueId: string, agentId?: string, label?: string) {
+  try {
+    const { command } = await api.getIssueShellCommand(issueId, agentId);
+    if (!command) {
+      toast.error("No command yet — open the shell once first to start a session.");
+      return;
+    }
+    await navigator.clipboard.writeText(command);
+    toast.success(label ? `Copied shell command — ${label}` : "Copied shell command");
+  } catch {
+    toast.error("Failed to copy shell command");
+  }
+}
+
+function CopyShellCommandButton({ issueId, agentId, label }: { issueId: string; agentId?: string; label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
+            aria-label={`Copy shell command — ${label}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void copyIssueShellCommand(issueId, agentId, label);
+            }}
+          >
+            <Copy />
+          </Button>
+        }
+      />
+      {/* eslint-disable-next-line i18next/no-literal-string */}
+      <TooltipContent side="bottom">Copy shell command — {label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function ShellAgentPicker({
+  issueId,
   assigneeId,
   agents,
   timeline,
   shellBasePath,
 }: {
+  issueId: string;
   assigneeId: string | null;
   agents: { id: string; name: string; archived_at?: string | null }[];
   timeline: TimelineEntry[];
@@ -153,24 +200,28 @@ function ShellAgentPicker({
     const href = only.id === assigneeId
       ? shellBasePath
       : `${shellBasePath}?agentId=${encodeURIComponent(only.id)}`;
+    const agentIdParam = only.id === assigneeId ? undefined : only.id;
     return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <AppLink href={href}>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="text-muted-foreground"
-                aria-label={`Open shell — ${only.name}`}
-              >
-                <Terminal />
-              </Button>
-            </AppLink>
-          }
-        />
-        <TooltipContent side="bottom">Open shell — {only.name}</TooltipContent>
-      </Tooltip>
+      <>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <AppLink href={href}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground"
+                  aria-label={`Open shell — ${only.name}`}
+                >
+                  <Terminal />
+                </Button>
+              </AppLink>
+            }
+          />
+          <TooltipContent side="bottom">Open shell — {only.name}</TooltipContent>
+        </Tooltip>
+        <CopyShellCommandButton issueId={issueId} agentId={agentIdParam} label={only.name} />
+      </>
     );
   }
 
@@ -194,18 +245,33 @@ function ShellAgentPicker({
           const href = agent.id === assigneeId
             ? shellBasePath
             : `${shellBasePath}?agentId=${encodeURIComponent(agent.id)}`;
+          const agentIdParam = agent.id === assigneeId ? undefined : agent.id;
           return (
-            <AppLink
-              key={agent.id}
-              href={href}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-            >
-              <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span className="truncate">{agent.name}</span>
-              {agent.id === assigneeId && (
-                <span className="ml-auto text-xs text-muted-foreground shrink-0">current</span>
-              )}
-            </AppLink>
+            <div key={agent.id} className="flex w-full items-center gap-1 rounded-md hover:bg-accent">
+              <AppLink
+                href={href}
+                className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-sm"
+              >
+                <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="truncate">{agent.name}</span>
+                {agent.id === assigneeId && (
+                  <span className="ml-auto text-xs text-muted-foreground shrink-0">current</span>
+                )}
+              </AppLink>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground shrink-0"
+                aria-label={`Copy shell command — ${agent.name}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void copyIssueShellCommand(issueId, agentIdParam, agent.name);
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           );
         })}
       </PopoverContent>
@@ -1981,6 +2047,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
               <TooltipContent side="bottom">{actions.isPinned ? t(($) => $.detail.unpin_tooltip) : t(($) => $.detail.pin_tooltip)}</TooltipContent>
             </Tooltip>
             <ShellAgentPicker
+              issueId={issue.id}
               assigneeId={issue.assignee_type === "agent" ? issue.assignee_id : null}
               agents={agents}
               timeline={timeline}
