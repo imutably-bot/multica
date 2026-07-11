@@ -32,6 +32,16 @@ func TestBuildInteractiveShellArgs(t *testing.T) {
 			want:     []string{"resume", "sess-2", "--no-alt-screen", "-C", "/work/dir", "--model", "gpt"},
 		},
 		{
+			// Regression: an empty workDir must not render as `-C ''`
+			// (KHI-542 — Tier A copy-command emitted this before a
+			// session/workdir existed for the issue).
+			name:     "codex omits -C flag entirely when workdir is empty",
+			provider: "codex",
+			in:       ShellArgsInput{Model: "gpt-5.4-mini"},
+			workDir:  "",
+			want:     []string{"--no-alt-screen", "--model", "gpt-5.4-mini"},
+		},
+		{
 			name:     "hermes prefixes chat subcommand",
 			provider: "hermes",
 			in:       ShellArgsInput{Model: "opus", PriorSessionID: "sess-3"},

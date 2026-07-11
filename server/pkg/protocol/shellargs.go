@@ -42,7 +42,10 @@ func BuildInteractiveShellArgs(provider string, in ShellArgsInput, workDir strin
 		if in.PriorSessionID != "" {
 			args = append([]string{"resume", in.PriorSessionID}, args...)
 		}
-		args = append(args, "--no-alt-screen", "-C", workDir)
+		args = append(args, "--no-alt-screen")
+		if workDir != "" {
+			args = append(args, "-C", workDir)
+		}
 		if in.Model != "" {
 			args = append(args, "--model", in.Model)
 		}

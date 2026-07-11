@@ -101,6 +101,16 @@ func (h *Handler) GetIssueShellCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Tier A only makes sense once a session has actually run: without a
+	// prior work dir there's nowhere real to `cd`/`-C` into, and for
+	// providers like codex that always emit `-C <workDir>`, an empty
+	// workDir would render as the broken `-C ''`. Report "no command yet"
+	// instead of a command that looks valid but silently misbehaves.
+	if launch.PriorWorkDir == "" {
+		writeJSON(w, http.StatusOK, IssueShellCommandResponse{})
+		return
+	}
+
 	cliName, ok := protocol.ProviderCLIName(launch.Provider)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "provider does not support issue shell yet")
