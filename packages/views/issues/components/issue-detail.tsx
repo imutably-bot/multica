@@ -99,6 +99,36 @@ import {
   useAnimatedRightSidebarState,
 } from "../../layout/animated-right-sidebar";
 
+// navigator.clipboard.writeText requires a secure context (HTTPS or
+// localhost) — it's undefined, or its promise rejects, on a plain-HTTP
+// deployment like this workspace's. Fall back to the legacy
+// execCommand("copy") textarea trick, which still works over HTTP.
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (window.isSecureContext && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // fall through to the legacy path below
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  document.body.removeChild(textarea);
+  return copied;
+}
+
 // Copies the command that would open the given agent's issue shell
 // session — same-machine only (see api.getIssueShellCommand) — so the
 // user can paste it into a terminal on the runtime's host instead of
@@ -110,7 +140,11 @@ async function copyIssueShellCommand(issueId: string, agentId?: string, label?: 
       toast.error("No command yet — open the shell once first to start a session.");
       return;
     }
-    await navigator.clipboard.writeText(command);
+    const copied = await copyTextToClipboard(command);
+    if (!copied) {
+      toast.error("Failed to copy shell command");
+      return;
+    }
     toast.success(label ? `Copied shell command — ${label}` : "Copied shell command");
   } catch {
     toast.error("Failed to copy shell command");
