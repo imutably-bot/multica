@@ -1473,6 +1473,17 @@ export class ApiClient {
     return this.fetch(`/api/issues/${issueId}/shell/session${qs}`);
   }
 
+  // Renders (but never runs) the command that would open this issue's
+  // shell session, for copying into a terminal on the machine hosting
+  // the agent's runtime daemon — same-machine only, no SSH.
+  async getIssueShellCommand(
+    issueId: string,
+    agentId?: string,
+  ): Promise<{ command: string; work_dir?: string }> {
+    const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return this.fetch(`/api/issues/${issueId}/shell/command${qs}`);
+  }
+
   async listTaskMessages(taskId: string): Promise<TaskMessagePayload[]> {
     return this.fetch(`/api/tasks/${taskId}/messages`);
   }

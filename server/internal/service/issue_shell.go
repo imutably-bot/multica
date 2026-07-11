@@ -24,6 +24,7 @@ type IssueShellLaunch struct {
 	IssueTitle          string
 	AgentID             string
 	AgentName           string
+	Provider            string
 	Model               string
 	ThinkingLevel       string
 	CustomEnv           map[string]string
