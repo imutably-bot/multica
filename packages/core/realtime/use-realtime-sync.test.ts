@@ -18,6 +18,7 @@ import type {
 import {
   applyChatDoneToCache,
   applyWorkspaceUpdatedToCache,
+  invalidateIssueSurfaceQueries,
   handleInboxNew,
   invalidateChatMessageQueries,
   resolveInboxSourceSlug,
@@ -144,6 +145,31 @@ describe("invalidateChatMessageQueries", () => {
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: chatKeys.messages(sessionId) });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: chatKeys.messagesPage(sessionId) });
+  });
+});
+
+describe("invalidateIssueSurfaceQueries", () => {
+  it("invalidates the issue detail and every workspace issue list variant", () => {
+    const qc = createQueryClient();
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+
+    invalidateIssueSurfaceQueries(qc, "ws-1", "issue-1");
+
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: issueKeys.detail("ws-1", "issue-1"),
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: issueKeys.list("ws-1"),
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: issueKeys.assigneeGroupsAll("ws-1"),
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: issueKeys.myAll("ws-1"),
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: issueKeys.myAssigneeGroupsAll("ws-1"),
+    });
   });
 });
 

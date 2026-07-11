@@ -98,6 +98,24 @@ export function invalidateChatMessageQueries(
   qc.invalidateQueries({ queryKey: chatKeys.messagesPage(sessionId) });
 }
 
+/**
+ * Comment activity can change the issue's updated_at / last-activity surface
+ * without altering its membership dimensions. Refresh the issue-specific
+ * detail row plus every workspace issue list variant so board/list views
+ * pick up the new state without waiting for a manual reload.
+ */
+export function invalidateIssueSurfaceQueries(
+  qc: QueryClient,
+  wsId: string,
+  issueId: string,
+) {
+  qc.invalidateQueries({ queryKey: issueKeys.detail(wsId, issueId) });
+  qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
+  qc.invalidateQueries({ queryKey: issueKeys.assigneeGroupsAll(wsId) });
+  qc.invalidateQueries({ queryKey: issueKeys.myAll(wsId) });
+  qc.invalidateQueries({ queryKey: issueKeys.myAssigneeGroupsAll(wsId) });
+}
+
 export function applyChatDoneToCache(
   qc: QueryClient,
   payload: ChatDonePayload,
@@ -684,27 +702,42 @@ export function useRealtimeSync(
 
     const unsubCommentCreated = ws.on("comment:created", (p) => {
       const { comment } = p as CommentCreatedPayload;
-      if (comment?.issue_id) invalidateTimeline(comment.issue_id);
+      if (!comment?.issue_id) return;
+      invalidateTimeline(comment.issue_id);
+      const wsId = getCurrentWsId();
+      if (wsId) invalidateIssueSurfaceQueries(qc, wsId, comment.issue_id);
     });
 
     const unsubCommentUpdated = ws.on("comment:updated", (p) => {
       const { comment } = p as CommentUpdatedPayload;
-      if (comment?.issue_id) invalidateTimeline(comment.issue_id);
+      if (!comment?.issue_id) return;
+      invalidateTimeline(comment.issue_id);
+      const wsId = getCurrentWsId();
+      if (wsId) invalidateIssueSurfaceQueries(qc, wsId, comment.issue_id);
     });
 
     const unsubCommentDeleted = ws.on("comment:deleted", (p) => {
       const { issue_id } = p as CommentDeletedPayload;
-      if (issue_id) invalidateTimeline(issue_id);
+      if (!issue_id) return;
+      invalidateTimeline(issue_id);
+      const wsId = getCurrentWsId();
+      if (wsId) invalidateIssueSurfaceQueries(qc, wsId, issue_id);
     });
 
     const unsubCommentResolved = ws.on("comment:resolved", (p) => {
       const { comment } = p as CommentResolvedPayload;
-      if (comment?.issue_id) invalidateTimeline(comment.issue_id);
+      if (!comment?.issue_id) return;
+      invalidateTimeline(comment.issue_id);
+      const wsId = getCurrentWsId();
+      if (wsId) invalidateIssueSurfaceQueries(qc, wsId, comment.issue_id);
     });
 
     const unsubCommentUnresolved = ws.on("comment:unresolved", (p) => {
       const { comment } = p as CommentUnresolvedPayload;
-      if (comment?.issue_id) invalidateTimeline(comment.issue_id);
+      if (!comment?.issue_id) return;
+      invalidateTimeline(comment.issue_id);
+      const wsId = getCurrentWsId();
+      if (wsId) invalidateIssueSurfaceQueries(qc, wsId, comment.issue_id);
     });
 
     const unsubActivityCreated = ws.on("activity:created", (p) => {
