@@ -95,6 +95,13 @@ func (h *Handler) GetIssueShellSession(w http.ResponseWriter, r *http.Request) {
 // network address for a runtime (the daemon only holds an outbound
 // websocket to the server), so there is no way to compose a working SSH
 // command from here.
+//
+// The server has no reliable signal for the runtime machine's OS (no
+// such field is recorded at daemon registration), so the caller passes
+// one via ?shell=powershell|cmd|posix — the frontend infers it from the
+// browser, which is right for the common single-machine self-hosted
+// case this feature targets. Unrecognized/absent values render POSIX
+// syntax, the prior default.
 func (h *Handler) GetIssueShellCommand(w http.ResponseWriter, r *http.Request) {
 	launch, _, ok := h.resolveIssueShellLaunch(w, r)
 	if !ok {
@@ -129,13 +136,7 @@ func (h *Handler) GetIssueShellCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	command := shellQuote(cliName)
-	for _, arg := range args {
-		command += " " + shellQuote(arg)
-	}
-	if launch.PriorWorkDir != "" {
-		command = "cd " + shellQuote(launch.PriorWorkDir) + " && " + command
-	}
+	command := renderShellCommand(r.URL.Query().Get("shell"), cliName, args, launch.PriorWorkDir)
 
 	writeJSON(w, http.StatusOK, IssueShellCommandResponse{
 		Command: command,
@@ -143,10 +144,51 @@ func (h *Handler) GetIssueShellCommand(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// renderShellCommand assembles a `cd <workDir> && <cli> <args...>`-shaped
+// command in the syntax of the given shell flavor.
+func renderShellCommand(shell, cliName string, args []string, workDir string) string {
+	switch shell {
+	case "cmd":
+		command := cmdQuote(cliName)
+		for _, arg := range args {
+			command += " " + cmdQuote(arg)
+		}
+		// /d also switches drive letter, unlike a bare `cd`.
+		return "cd /d " + cmdQuote(workDir) + " && " + command
+	case "powershell":
+		command := "& " + powershellQuote(cliName)
+		for _, arg := range args {
+			command += " " + powershellQuote(arg)
+		}
+		return "Set-Location -LiteralPath " + powershellQuote(workDir) + "; " + command
+	default:
+		command := shellQuote(cliName)
+		for _, arg := range args {
+			command += " " + shellQuote(arg)
+		}
+		return "cd " + shellQuote(workDir) + " && " + command
+	}
+}
+
 // shellQuote wraps a value in single quotes for safe use in a POSIX
 // shell command line, escaping any embedded single quotes.
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+// powershellQuote wraps a value in single quotes for safe use in a
+// PowerShell command line. Inside a single-quoted PowerShell string, a
+// literal single quote is written as two consecutive single quotes.
+func powershellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+
+// cmdQuote wraps a value in double quotes for safe use in a cmd.exe
+// command line. cmd.exe has no escape for a literal double quote inside
+// a double-quoted argument, so this covers the common case (paths and
+// CLI args with spaces, no embedded quotes) rather than every case.
+func cmdQuote(value string) string {
+	return `"` + value + `"`
 }
 
 func (h *Handler) IssueShellWebSocket(w http.ResponseWriter, r *http.Request) {
