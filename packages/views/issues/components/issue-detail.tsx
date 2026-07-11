@@ -129,13 +129,27 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
   return copied;
 }
 
+// Best-effort guess at the OS of the machine this command will be
+// pasted into. The server has no reliable signal for the runtime
+// machine's OS (nothing is recorded at daemon registration), so this
+// relies on the browser's own platform — correct for the common
+// single-machine self-hosted setup this Tier A feature targets, where
+// the browser and the runtime daemon are the same box. Windows favors
+// PowerShell since it's the default shell in Windows Terminal on 10/11.
+function detectClientShell(): "posix" | "cmd" | "powershell" {
+  if (typeof navigator === "undefined") return "posix";
+  const uaPlatform = (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform;
+  const platform = uaPlatform ?? navigator.platform ?? navigator.userAgent ?? "";
+  return /win/i.test(platform) ? "powershell" : "posix";
+}
+
 // Copies the command that would open the given agent's issue shell
 // session — same-machine only (see api.getIssueShellCommand) — so the
 // user can paste it into a terminal on the runtime's host instead of
 // using the browser shell.
 async function copyIssueShellCommand(issueId: string, agentId?: string, label?: string) {
   try {
-    const { command } = await api.getIssueShellCommand(issueId, agentId);
+    const { command } = await api.getIssueShellCommand(issueId, agentId, detectClientShell());
     if (!command) {
       toast.error("No command yet — open the shell once first to start a session.");
       return;
