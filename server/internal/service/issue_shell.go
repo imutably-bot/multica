@@ -24,6 +24,11 @@ type IssueShellLaunch struct {
 	IssueTitle          string
 	AgentID             string
 	AgentName           string
+	Provider            string
+	// RuntimeOS is the daemon machine's reported OS ("windows", "linux",
+	// "darwin", ...) from its most recent registration; empty when the
+	// daemon predates KHI-542's os field or the metadata failed to parse.
+	RuntimeOS           string
 	Model               string
 	ThinkingLevel       string
 	CustomEnv           map[string]string

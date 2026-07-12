@@ -1468,6 +1468,24 @@ export class ApiClient {
     return this.fetch(`/api/issues/${issueId}/shell/session${qs}`);
   }
 
+  // Renders (but never runs) the command that would open this issue's
+  // shell session, for copying into a terminal on the machine hosting
+  // the agent's runtime daemon — same-machine only, no SSH. `shell`
+  // selects the target syntax ("posix" | "cmd" | "powershell"); the
+  // server has no reliable signal for the runtime machine's OS, so the
+  // caller (the browser) supplies its best guess.
+  async getIssueShellCommand(
+    issueId: string,
+    agentId?: string,
+    shell?: "posix" | "cmd" | "powershell",
+  ): Promise<{ command: string; work_dir?: string }> {
+    const params = new URLSearchParams();
+    if (agentId) params.set("agent_id", agentId);
+    if (shell) params.set("shell", shell);
+    const qs = params.toString();
+    return this.fetch(`/api/issues/${issueId}/shell/command${qs ? `?${qs}` : ""}`);
+  }
+
   async listTaskMessages(taskId: string): Promise<TaskMessagePayload[]> {
     return this.fetch(`/api/tasks/${taskId}/messages`);
   }
