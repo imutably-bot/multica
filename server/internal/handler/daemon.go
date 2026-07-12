@@ -179,6 +179,11 @@ type DaemonRegisterRequest struct {
 	DeviceName      string   `json:"device_name"`
 	CLIVersion      string   `json:"cli_version"` // multica CLI version
 	LaunchedBy      string   `json:"launched_by"` // "desktop" when spawned by the Electron app
+	// OS is the daemon machine's runtime.GOOS ("windows", "linux",
+	// "darwin", ...). Empty for daemons older than KHI-542 that haven't
+	// re-registered with this field yet — callers must treat that as
+	// "unknown", not as evidence of a non-Windows machine.
+	OS string `json:"os"`
 	Runtimes        []struct {
 		Name    string `json:"name"`
 		Type    string `json:"type"`
@@ -351,6 +356,7 @@ func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
 			"version":     runtime.Version,
 			"cli_version": req.CLIVersion,
 			"launched_by": req.LaunchedBy,
+			"os":          req.OS,
 		})
 
 		var registered db.AgentRuntime
@@ -543,6 +549,7 @@ func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
 			"version":                            "",
 			"cli_version":                        req.CLIVersion,
 			"launched_by":                        req.LaunchedBy,
+			"os":                                 req.OS,
 			"runtime_profile_registration_error": true,
 			"runtime_profile_failure_reason":     reason,
 			"command_name":                       commandName,

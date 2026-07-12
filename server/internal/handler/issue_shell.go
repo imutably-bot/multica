@@ -136,12 +136,34 @@ func (h *Handler) GetIssueShellCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	command := renderShellCommand(r.URL.Query().Get("shell"), cliName, args, launch.PriorWorkDir)
+	shell := resolveShellFlavor(launch.RuntimeOS, r.URL.Query().Get("shell"))
+	command := renderShellCommand(shell, cliName, args, launch.PriorWorkDir)
 
 	writeJSON(w, http.StatusOK, IssueShellCommandResponse{
 		Command: command,
 		WorkDir: launch.PriorWorkDir,
 	})
+}
+
+// resolveShellFlavor picks the shell syntax to render the copy command
+// in. The runtime's own reported OS (from daemon registration, KHI-542)
+// is authoritative when known — the browser making this request may be
+// a completely different machine than the one running the daemon, so
+// its guess can't be trusted to override a known runtime OS. The
+// client-supplied hint is used only as a fallback for daemons that
+// haven't re-registered with the os field yet.
+func resolveShellFlavor(runtimeOS, clientHint string) string {
+	switch runtimeOS {
+	case "windows":
+		if clientHint == "cmd" {
+			return "cmd"
+		}
+		return "powershell"
+	case "linux", "darwin":
+		return "posix"
+	default:
+		return clientHint
+	}
 }
 
 // renderShellCommand assembles a `cd <workDir> && <cli> <args...>`-shaped
@@ -298,6 +320,15 @@ func (h *Handler) resolveIssueShellLaunch(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "failed to load agent runtime")
 		return service.IssueShellLaunch{}, service.IssueShellSnapshot{}, false
 	}
+	runtimeOS := ""
+	if len(runtime.Metadata) > 0 {
+		var runtimeMeta struct {
+			OS string `json:"os"`
+		}
+		if err := json.Unmarshal(runtime.Metadata, &runtimeMeta); err == nil {
+			runtimeOS = runtimeMeta.OS
+		}
+	}
 
 	workspaceContext := ""
 	workspaceName := ""
@@ -360,6 +391,7 @@ func (h *Handler) resolveIssueShellLaunch(w http.ResponseWriter, r *http.Request
 		AgentID:             uuidToString(agent.ID),
 		AgentName:           agent.Name,
 		Provider:            runtime.Provider,
+		RuntimeOS:           runtimeOS,
 		Model:               model,
 		ThinkingLevel:       thinkingLevel,
 		CustomEnv:           customEnv,

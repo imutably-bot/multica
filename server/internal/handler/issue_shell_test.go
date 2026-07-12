@@ -21,6 +21,56 @@ func TestShellQuote(t *testing.T) {
 	}
 }
 
+func TestResolveShellFlavor(t *testing.T) {
+	tests := []struct {
+		name       string
+		runtimeOS  string
+		clientHint string
+		want       string
+	}{
+		{
+			// The reported bug: browsing from a non-Windows machine
+			// while the runtime daemon is on Windows must not render
+			// POSIX syntax just because the client guessed wrong.
+			name:       "known windows runtime overrides a posix client guess",
+			runtimeOS:  "windows",
+			clientHint: "posix",
+			want:       "powershell",
+		},
+		{
+			name:       "known windows runtime respects an explicit cmd request",
+			runtimeOS:  "windows",
+			clientHint: "cmd",
+			want:       "cmd",
+		},
+		{
+			name:       "known linux runtime overrides a powershell client guess",
+			runtimeOS:  "linux",
+			clientHint: "powershell",
+			want:       "posix",
+		},
+		{
+			name:       "known darwin runtime overrides a powershell client guess",
+			runtimeOS:  "darwin",
+			clientHint: "powershell",
+			want:       "posix",
+		},
+		{
+			name:       "unknown runtime os falls back to the client hint",
+			runtimeOS:  "",
+			clientHint: "powershell",
+			want:       "powershell",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveShellFlavor(tt.runtimeOS, tt.clientHint); got != tt.want {
+				t.Errorf("resolveShellFlavor(%q, %q) = %q, want %q", tt.runtimeOS, tt.clientHint, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPowershellQuote(t *testing.T) {
 	tests := []struct {
 		name  string

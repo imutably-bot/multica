@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -977,8 +978,13 @@ func (d *Daemon) registerRuntimesForWorkspace(ctx context.Context, workspaceID s
 		"device_name":       d.cfg.DeviceName,
 		"cli_version":       d.cfg.CLIVersion,
 		"launched_by":       d.cfg.LaunchedBy,
-		"runtimes":          runtimes,
-		"failed_profiles":   failedProfiles,
+		// Lets the server render the right shell syntax (POSIX vs
+		// PowerShell/cmd) for the Tier A copy-command feature without
+		// guessing from the browser, which may be a different machine
+		// than this runtime (KHI-542).
+		"os":              runtime.GOOS,
+		"runtimes":        runtimes,
+		"failed_profiles": failedProfiles,
 	}
 
 	resp, err := d.client.Register(ctx, req)
