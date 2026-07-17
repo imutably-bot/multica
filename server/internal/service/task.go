@@ -2693,27 +2693,56 @@ func (s *TaskService) createAgentComment(ctx context.Context, issueID, agentID p
 		return
 	}
 	s.CancelDeferredEscalationsForIssueAgent(ctx, issueID, agentID)
+	payload := map[string]any{
+		"comment": map[string]any{
+			"id":             util.UUIDToString(comment.ID),
+			"issue_id":       util.UUIDToString(comment.IssueID),
+			"author_type":    comment.AuthorType,
+			"author_id":      util.UUIDToString(comment.AuthorID),
+			"content":        comment.Content,
+			"type":           comment.Type,
+			"parent_id":      util.UUIDToPtr(comment.ParentID),
+			"source_task_id": util.UUIDToPtr(comment.SourceTaskID),
+			"created_at":     comment.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
+		},
+		"issue_title":  issue.Title,
+		"issue_status": issue.Status,
+	}
+	updatedAt, err := s.Queries.TouchIssueUpdatedAt(ctx, db.TouchIssueUpdatedAtParams{
+		ID:          issueID,
+		WorkspaceID: issue.WorkspaceID,
+	})
+	if err != nil {
+		slog.Warn("agent comment: touch issue after comment failed",
+			"error", err,
+			"issue_id", util.UUIDToString(issueID))
+	} else {
+		payload["issue_updated_at"] = updatedAt.Time.Format("2006-01-02T15:04:05Z")
+	}
 	s.Bus.Publish(events.Event{
 		Type:        protocol.EventCommentCreated,
 		WorkspaceID: util.UUIDToString(issue.WorkspaceID),
 		ActorType:   "agent",
 		ActorID:     util.UUIDToString(agentID),
-		Payload: map[string]any{
-			"comment": map[string]any{
-				"id":             util.UUIDToString(comment.ID),
-				"issue_id":       util.UUIDToString(comment.IssueID),
-				"author_type":    comment.AuthorType,
-				"author_id":      util.UUIDToString(comment.AuthorID),
-				"content":        comment.Content,
-				"type":           comment.Type,
-				"parent_id":      util.UUIDToPtr(comment.ParentID),
-				"source_task_id": util.UUIDToPtr(comment.SourceTaskID),
-				"created_at":     comment.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
-			},
-			"issue_title":  issue.Title,
-			"issue_status": issue.Status,
-		},
+		Payload:     payload,
 	})
+
+	if err == nil {
+		s.Bus.Publish(events.Event{
+			Type:        protocol.EventIssueUpdated,
+			WorkspaceID: util.UUIDToString(issue.WorkspaceID),
+			ActorType:   "agent",
+			ActorID:     util.UUIDToString(agentID),
+			Payload: map[string]any{
+				"issue": map[string]any{
+					"id":           util.UUIDToString(issueID),
+					"workspace_id": util.UUIDToString(issue.WorkspaceID),
+					"updated_at":   updatedAt.Time.Format("2006-01-02T15:04:05Z"),
+				},
+			},
+		})
+	}
+
 	s.AutoUnresolveThreadOnReply(ctx, rootComment, util.UUIDToString(issue.WorkspaceID), "agent", util.UUIDToString(agentID))
 }
 

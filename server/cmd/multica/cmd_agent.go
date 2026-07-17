@@ -29,6 +29,13 @@ var agentListCmd = &cobra.Command{
 	RunE:  runAgentList,
 }
 
+var agentSearchCmd = &cobra.Command{
+	Use:   "search <query>",
+	Short: "Search agents in the workspace by name or description (supports * and ? wildcards)",
+	Args:  exactArgs(1),
+	RunE:  runAgentSearch,
+}
+
 var agentGetCmd = &cobra.Command{
 	Use:   "get <id>",
 	Short: "Get agent details",
@@ -132,6 +139,7 @@ var agentSkillsAddCmd = &cobra.Command{
 
 func init() {
 	agentCmd.AddCommand(agentListCmd)
+	agentCmd.AddCommand(agentSearchCmd)
 	agentCmd.AddCommand(agentGetCmd)
 	agentCmd.AddCommand(agentCreateCmd)
 	agentCmd.AddCommand(agentUpdateCmd)
@@ -152,6 +160,11 @@ func init() {
 	// agent list
 	agentListCmd.Flags().String("output", "table", "Output format: table or json")
 	agentListCmd.Flags().Bool("include-archived", false, "Include archived agents")
+	agentListCmd.Flags().String("search", "", "Search query for filtering agents (supports * and ? wildcards)")
+
+	// agent search
+	agentSearchCmd.Flags().String("output", "table", "Output format: table or json")
+	agentSearchCmd.Flags().Bool("include-archived", false, "Include archived agents")
 
 	// agent get
 	agentGetCmd.Flags().String("output", "json", "Output format: table or json")
@@ -411,6 +424,9 @@ func runAgentList(cmd *cobra.Command, _ []string) error {
 	params.Set("workspace_id", client.WorkspaceID)
 	if v, _ := cmd.Flags().GetBool("include-archived"); v {
 		params.Set("include_archived", "true")
+	}
+	if v, _ := cmd.Flags().GetString("search"); v != "" {
+		params.Set("q", v)
 	}
 	path := "/api/agents"
 	if len(params) > 0 {
@@ -1271,4 +1287,63 @@ func strVal(m map[string]any, key string) string {
 		return ""
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+func runAgentSearch(cmd *cobra.Command, args []string) error {
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+	if client.WorkspaceID == "" {
+		if _, err := requireWorkspaceID(cmd); err != nil {
+			return err
+		}
+	}
+
+	ctx, cancel := cli.APIContext(context.Background())
+	defer cancel()
+
+	params := url.Values{}
+	params.Set("workspace_id", client.WorkspaceID)
+	params.Set("q", args[0])
+	if v, _ := cmd.Flags().GetBool("include-archived"); v {
+		params.Set("include_archived", "true")
+	}
+
+	path := "/api/agents/search?" + params.Encode()
+
+	var result map[string]any
+	if err := client.GetJSON(ctx, path, &result); err != nil {
+		return fmt.Errorf("search agents: %w", err)
+	}
+
+	agentsRaw, _ := result["agents"].([]any)
+
+	output, _ := cmd.Flags().GetString("output")
+	if output == "json" {
+		return cli.PrintJSON(os.Stdout, result)
+	}
+
+	headers := []string{"ID", "NAME", "STATUS", "RUNTIME", "ARCHIVED"}
+	rows := make([][]string, 0, len(agentsRaw))
+	for _, raw := range agentsRaw {
+		a, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		archived := ""
+		if v := strVal(a, "archived_at"); v != "" {
+			archived = "yes"
+		}
+		rows = append(rows, []string{
+			strVal(a, "id"),
+			strVal(a, "name"),
+			strVal(a, "status"),
+			strVal(a, "runtime_mode"),
+			archived,
+		})
+	}
+
+	cli.PrintTable(os.Stdout, headers, rows)
+	return nil
 }
