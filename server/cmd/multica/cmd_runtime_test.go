@@ -24,6 +24,19 @@ func newRuntimeDeleteTestCmd(serverURL string) *cobra.Command {
 	return cmd
 }
 
+func newRuntimeSetSSHTargetTestCmd(serverURL string) *cobra.Command {
+	cmd := &cobra.Command{Use: "set-ssh-target"}
+	cmd.Flags().String("server-url", "", "")
+	cmd.Flags().String("workspace-id", "", "")
+	cmd.Flags().String("profile", "", "")
+	cmd.Flags().String("target", "", "")
+	cmd.Flags().Bool("clear", false, "")
+	cmd.Flags().String("output", "table", "")
+	_ = cmd.Flags().Set("server-url", serverURL)
+	_ = cmd.Flags().Set("workspace-id", "ws-1")
+	return cmd
+}
+
 func captureRuntimeStdout(t *testing.T, fn func() error) (string, error) {
 	t.Helper()
 	old := os.Stdout
@@ -177,5 +190,99 @@ func TestRunRuntimeDeleteCascadeConfirmsActiveAgentSnapshot(t *testing.T) {
 	}
 	if got["id"] != "rt-1" || got["deleted"] != true || got["agents_archived"] != float64(2) {
 		t.Fatalf("stdout = %#v, want cascade result", got)
+	}
+}
+
+func TestRunRuntimeSetSSHTargetSendsPatchWithTarget(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MULTICA_TOKEN", "test-token")
+
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			t.Fatalf("method = %s, want PATCH", r.Method)
+		}
+		if r.URL.Path != "/api/runtimes/rt-1" {
+			t.Fatalf("path = %q, want /api/runtimes/rt-1", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "rt-1", "ssh_target": "user@gamer-pc"})
+	}))
+	defer srv.Close()
+
+	cmd := newRuntimeSetSSHTargetTestCmd(srv.URL)
+	_ = cmd.Flags().Set("target", "user@gamer-pc")
+	_ = cmd.Flags().Set("output", "json")
+
+	out, err := captureRuntimeStdout(t, func() error {
+		return runRuntimeSetSSHTarget(cmd, []string{"rt-1"})
+	})
+	if err != nil {
+		t.Fatalf("runRuntimeSetSSHTarget: %v", err)
+	}
+	if gotBody["ssh_target"] != "user@gamer-pc" {
+		t.Fatalf("request body ssh_target = %#v, want user@gamer-pc", gotBody["ssh_target"])
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode stdout JSON %q: %v", out, err)
+	}
+	if got["ssh_target"] != "user@gamer-pc" {
+		t.Fatalf("stdout = %#v, want ssh_target user@gamer-pc", got)
+	}
+}
+
+func TestRunRuntimeSetSSHTargetClearSendsEmptyString(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MULTICA_TOKEN", "test-token")
+
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "rt-1", "ssh_target": nil})
+	}))
+	defer srv.Close()
+
+	cmd := newRuntimeSetSSHTargetTestCmd(srv.URL)
+	_ = cmd.Flags().Set("clear", "true")
+
+	if _, err := captureRuntimeStdout(t, func() error {
+		return runRuntimeSetSSHTarget(cmd, []string{"rt-1"})
+	}); err != nil {
+		t.Fatalf("runRuntimeSetSSHTarget: %v", err)
+	}
+	if gotBody["ssh_target"] != "" {
+		t.Fatalf("request body ssh_target = %#v, want empty string (clear)", gotBody["ssh_target"])
+	}
+}
+
+func TestRunRuntimeSetSSHTargetRequiresTargetOrClear(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MULTICA_TOKEN", "test-token")
+
+	cmd := newRuntimeSetSSHTargetTestCmd("http://unused.invalid")
+	if _, err := captureRuntimeStdout(t, func() error {
+		return runRuntimeSetSSHTarget(cmd, []string{"rt-1"})
+	}); err == nil {
+		t.Fatalf("expected error when neither --target nor --clear is set")
+	}
+}
+
+func TestRunRuntimeSetSSHTargetRejectsTargetAndClearTogether(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MULTICA_TOKEN", "test-token")
+
+	cmd := newRuntimeSetSSHTargetTestCmd("http://unused.invalid")
+	_ = cmd.Flags().Set("target", "user@host")
+	_ = cmd.Flags().Set("clear", "true")
+
+	if _, err := captureRuntimeStdout(t, func() error {
+		return runRuntimeSetSSHTarget(cmd, []string{"rt-1"})
+	}); err == nil {
+		t.Fatalf("expected error when both --target and --clear are set")
 	}
 }

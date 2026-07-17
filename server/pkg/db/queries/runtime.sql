@@ -106,6 +106,16 @@ WHERE id = @id
 RETURNING *;
 
 
+-- name: UpdateAgentRuntimeSSHTarget :one
+-- Sets (or clears, when @ssh_target is NULL) the opt-in `user@host:port`
+-- SSH target an operator has confirmed is reachable for this runtime. See
+-- migration 135: this is never inferred by the server or asserted by the
+-- daemon, only set explicitly via `multica runtime set-ssh-target`.
+UPDATE agent_runtime
+SET ssh_target = @ssh_target, updated_at = now()
+WHERE id = @id
+RETURNING *;
+
 -- name: TouchAgentRuntimeLastSeen :execrows
 -- Bumps last_seen_at on an already-online runtime. Deliberately does NOT
 -- touch status or updated_at: status is unchanged on the hot heartbeat path,

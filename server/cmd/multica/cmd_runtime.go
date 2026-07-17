@@ -57,12 +57,29 @@ var runtimeDeleteCmd = &cobra.Command{
 	RunE: runRuntimeDelete,
 }
 
+var runtimeSetSSHTargetCmd = &cobra.Command{
+	Use:   "set-ssh-target <runtime-id>",
+	Short: "Set (or clear) the SSH target used to reach this runtime's machine",
+	Long: "Sets the opt-in `user@host` (or `user@host:port`, or a bare Host alias from your\n" +
+		"~/.ssh/config) that this runtime's machine is reachable at over SSH.\n\n" +
+		"This is never inferred — the daemon only holds an outbound connection to the\n" +
+		"server, so the server has no way to know a runtime is reachable from outside its\n" +
+		"network. Set this only when you, the operator, have confirmed SSH access to the\n" +
+		"machine yourself. Once set, the issue shell's \"Copy shell command\" renders an\n" +
+		"`ssh <target> -t \"...\"` command reachable from any machine, instead of the\n" +
+		"same-machine-only default.\n\n" +
+		"Pass --clear to remove a previously set target.",
+	Args: exactArgs(1),
+	RunE: runRuntimeSetSSHTarget,
+}
+
 func init() {
 	runtimeCmd.AddCommand(runtimeListCmd)
 	runtimeCmd.AddCommand(runtimeUsageCmd)
 	runtimeCmd.AddCommand(runtimeActivityCmd)
 	runtimeCmd.AddCommand(runtimeUpdateCmd)
 	runtimeCmd.AddCommand(runtimeDeleteCmd)
+	runtimeCmd.AddCommand(runtimeSetSSHTargetCmd)
 
 	// runtime list
 	runtimeListCmd.Flags().String("output", "table", "Output format: table or json")
@@ -82,6 +99,11 @@ func init() {
 	// runtime delete
 	runtimeDeleteCmd.Flags().Bool("cascade", false, "Archive active agents bound to the runtime, cancel their tasks, then delete the runtime")
 	runtimeDeleteCmd.Flags().String("output", "table", "Output format: table or json")
+
+	// runtime set-ssh-target
+	runtimeSetSSHTargetCmd.Flags().String("target", "", "SSH target, e.g. user@host, user@host:port, or a ~/.ssh/config Host alias")
+	runtimeSetSSHTargetCmd.Flags().Bool("clear", false, "Clear a previously set SSH target")
+	runtimeSetSSHTargetCmd.Flags().String("output", "table", "Output format: table or json")
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +259,42 @@ func runRuntimeDelete(cmd *cobra.Command, args []string) error {
 	result["id"] = runtimeID
 	result["deleted"] = true
 	return printRuntimeDeleteResult(cmd, result)
+}
+
+func runRuntimeSetSSHTarget(cmd *cobra.Command, args []string) error {
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+
+	target, _ := cmd.Flags().GetString("target")
+	clear, _ := cmd.Flags().GetBool("clear")
+	if clear && target != "" {
+		return fmt.Errorf("--target and --clear are mutually exclusive")
+	}
+	if !clear && target == "" {
+		return fmt.Errorf("--target is required (or pass --clear to remove the current target)")
+	}
+
+	ctx, cancel := cli.APIContext(context.Background())
+	defer cancel()
+
+	body := map[string]any{"ssh_target": target}
+	var runtime map[string]any
+	if err := client.PatchJSON(ctx, "/api/runtimes/"+args[0], body, &runtime); err != nil {
+		return fmt.Errorf("set runtime ssh target: %w", err)
+	}
+
+	output, _ := cmd.Flags().GetString("output")
+	if output == "json" {
+		return cli.PrintJSON(os.Stdout, runtime)
+	}
+	if clear {
+		fmt.Fprintf(os.Stderr, "Runtime %s: SSH target cleared.\n", args[0])
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "Runtime %s: SSH target set to %q.\n", args[0], target)
+	return nil
 }
 
 func runRuntimeUpdate(cmd *cobra.Command, args []string) error {

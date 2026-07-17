@@ -149,7 +149,7 @@ function detectClientShell(): "posix" | "cmd" | "powershell" {
 // using the browser shell.
 async function copyIssueShellCommand(issueId: string, agentId?: string, label?: string) {
   try {
-    const { command } = await api.getIssueShellCommand(issueId, agentId, detectClientShell());
+    const { command, remote, ssh_target } = await api.getIssueShellCommand(issueId, agentId, detectClientShell());
     if (!command) {
       toast.error("No command yet — open the shell once first to start a session.");
       return;
@@ -159,7 +159,15 @@ async function copyIssueShellCommand(issueId: string, agentId?: string, label?: 
       toast.error("Failed to copy shell command");
       return;
     }
-    toast.success(label ? `Copied shell command — ${label}` : "Copied shell command");
+    const copiedLabel = label ? `Copied shell command — ${label}` : "Copied shell command";
+    // Remote (SSH) commands run on a different machine than the one that
+    // just copied them — call that out so nobody pastes an SSH command
+    // blind into an unexpected host (KHI-677).
+    if (remote && ssh_target) {
+      toast.success(`${copiedLabel} — runs on ${ssh_target}, configured for this runtime`);
+    } else {
+      toast.success(copiedLabel);
+    }
   } catch {
     toast.error("Failed to copy shell command");
   }

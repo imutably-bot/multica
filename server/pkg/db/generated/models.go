@@ -77,6 +77,7 @@ type AgentRuntime struct {
 	LegacyDaemonID pgtype.Text        `json:"legacy_daemon_id"`
 	Visibility     string             `json:"visibility"`
 	ProfileID      pgtype.UUID        `json:"profile_id"`
+	SshTarget      pgtype.Text        `json:"ssh_target"`
 }
 
 type AgentSkill struct {

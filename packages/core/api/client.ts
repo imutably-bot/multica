@@ -1469,16 +1469,18 @@ export class ApiClient {
   }
 
   // Renders (but never runs) the command that would open this issue's
-  // shell session, for copying into a terminal on the machine hosting
-  // the agent's runtime daemon — same-machine only, no SSH. `shell`
-  // selects the target syntax ("posix" | "cmd" | "powershell"); the
-  // server has no reliable signal for the runtime machine's OS, so the
-  // caller (the browser) supplies its best guess.
+  // shell session, for copying into a terminal. Same-machine only (no
+  // SSH) unless the runtime has an operator-configured ssh_target (Tier
+  // B, KHI-677), in which case `remote` is true and `command` is an
+  // `ssh <ssh_target> ...` invocation instead. `shell` selects the local
+  // wrapping syntax ("posix" | "cmd" | "powershell"); the server has no
+  // reliable signal for the runtime machine's OS, so the caller (the
+  // browser) supplies its best guess.
   async getIssueShellCommand(
     issueId: string,
     agentId?: string,
     shell?: "posix" | "cmd" | "powershell",
-  ): Promise<{ command: string; work_dir?: string }> {
+  ): Promise<{ command: string; work_dir?: string; remote?: boolean; ssh_target?: string }> {
     const params = new URLSearchParams();
     if (agentId) params.set("agent_id", agentId);
     if (shell) params.set("shell", shell);
