@@ -46,4 +46,25 @@ describe("matchesPinyin", () => {
     expect(matchesPinyin("吕布", "lb")).toBe(true);
     expect(matchesPinyin("吕布", "lv")).toBe(true);
   });
+
+  describe("wildcard match", () => {
+    it("matches suffix wildcard *", () => {
+      expect(matchesPinyin("wild-agent-one", "wild*")).toBe(true);
+      expect(matchesPinyin("wild-agent-one", "wild-agent*")).toBe(true);
+      expect(matchesPinyin("wild-agent-one", "wild-agent-two*")).toBe(false);
+    });
+
+    it("matches prefix wildcard *", () => {
+      expect(matchesPinyin("wild-agent-one", "*one")).toBe(true);
+      expect(matchesPinyin("wild-agent-one", "*agent*")).toBe(true);
+    });
+
+    it("matches single character wildcard ?", () => {
+      expect(matchesPinyin("wild-agent-one", "wild-agent-on?")).toBe(true);
+      expect(matchesPinyin("wild-agent-one", "wild-agent-o?e")).toBe(true);
+      expect(matchesPinyin("wild-agent-one", "wild-agent-?ne")).toBe(true);
+      expect(matchesPinyin("wild-agent-one", "wild-agent-o??")).toBe(true);
+      expect(matchesPinyin("wild-agent-one", "wild-agent-?")).toBe(false);
+    });
+  });
 });

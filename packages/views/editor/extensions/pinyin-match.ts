@@ -7,8 +7,28 @@ import { pinyin } from "pinyin-pro";
  * - Initial letter abbreviation: "lyl" matches "李云龙"
  * - Partial prefix match: "liyu" matches "李云龙"
  */
+export function matchesWildcard(name: string, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+
+  // Escape special regex chars except * and ?
+  let escaped = q.replace(/[\\^$.|[\]()+]/g, "\\$&");
+  // Map * to .* and ? to .
+  let regexStr = escaped.replace(/\*/g, ".*").replace(/\?/g, ".");
+  try {
+    const regex = new RegExp(`^${regexStr}$`, "i");
+    return regex.test(name);
+  } catch (e) {
+    return name.toLowerCase().includes(q);
+  }
+}
+
 export function matchesPinyin(name: string, query: string): boolean {
   if (!query) return true;
+
+  if (query.includes("*") || query.includes("?")) {
+    return matchesWildcard(name, query);
+  }
 
   // Only attempt pinyin matching if the name contains Chinese characters
   if (!/[\u4e00-\u9fff]/.test(name)) return false;

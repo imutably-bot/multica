@@ -8,6 +8,14 @@ SELECT * FROM agent
 WHERE workspace_id = $1
 ORDER BY created_at ASC;
 
+-- name: SearchAgents :many
+SELECT * FROM agent
+WHERE workspace_id = $1
+  AND (archived_at IS NULL OR sqlc.arg('include_archived')::boolean)
+  AND (LOWER(name) LIKE $2 OR LOWER(COALESCE(description, '')) LIKE $2)
+ORDER BY created_at ASC;
+
+
 -- name: GetAgent :one
 SELECT * FROM agent
 WHERE id = $1;
