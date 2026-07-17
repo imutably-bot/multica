@@ -34,11 +34,21 @@ type browserIssueShellMessage struct {
 
 type IssueShellCommandResponse struct {
 	// Command the user can paste into their own terminal to reach the
-	// same session as the issue shell — but only from the machine
-	// hosting the agent's runtime daemon, since that's where the
-	// provider CLI and work directory actually live.
+	// same session as the issue shell. Same-machine-only (Tier A) unless
+	// Remote is true, in which case it's an `ssh <target> ...` command
+	// reachable from any machine that can resolve the operator-configured
+	// target (Tier B, KHI-677).
 	Command string `json:"command"`
 	WorkDir string `json:"work_dir,omitempty"`
+	// Remote is true when Command is an SSH invocation rather than a
+	// same-machine one, because the runtime has an operator-configured
+	// ssh_target (see migration 135). The frontend uses this to render a
+	// disclaimer naming the target instead of the plain same-machine copy.
+	Remote bool `json:"remote,omitempty"`
+	// SSHTarget echoes the runtime's configured ssh_target when Remote is
+	// true, so the frontend disclaimer can name the host without a
+	// separate runtime lookup.
+	SSHTarget string `json:"ssh_target,omitempty"`
 }
 
 func (h *Handler) CreateIssueShellSession(w http.ResponseWriter, r *http.Request) {
@@ -86,21 +96,29 @@ func (h *Handler) GetIssueShellSession(w http.ResponseWriter, r *http.Request) {
 
 // GetIssueShellCommand renders — but never runs — the command that would
 // open this issue's shell session, so the user can copy it into a
-// terminal on the machine hosting the agent's runtime daemon. It reuses
-// protocol.BuildInteractiveShellArgs, the same arg-composition the daemon
-// uses to actually launch the session, so the two never drift apart.
+// terminal. It reuses protocol.BuildInteractiveShellArgs, the same
+// arg-composition the daemon uses to actually launch the session, so the
+// two never drift apart.
 //
-// This is a same-machine command only: the server has no reachable
-// network address for a runtime (the daemon only holds an outbound
-// websocket to the server), so there is no way to compose a working SSH
-// command from here.
+// By default this is a same-machine command only (Tier A, KHI-542): the
+// server has no reachable network address for a runtime (the daemon only
+// holds an outbound websocket), so there is no way to compose a working
+// SSH command from here in general. When an operator has explicitly set
+// the runtime's ssh_target (Tier B, KHI-677 — see migration 135), that
+// opt-in value is the one exception: it's a fact the operator asserted
+// about their own machine, not something this handler infers, so the
+// rendered command becomes `ssh <ssh_target> -t "..."` instead.
 //
 // The server has no reliable signal for the runtime machine's OS (no
 // such field is recorded at daemon registration), so the caller passes
 // one via ?shell=powershell|cmd|posix — the frontend infers it from the
 // browser, which is right for the common single-machine self-hosted
 // case this feature targets. Unrecognized/absent values render POSIX
-// syntax, the prior default.
+// syntax, the prior default. The ssh_target path always renders the
+// *remote* half in POSIX syntax regardless of ?shell=, since the daemon
+// machine's shell (not the browser's) is what actually runs it; ?shell=
+// still picks the *local* wrapping syntax for the `ssh ...` invocation
+// itself.
 func (h *Handler) GetIssueShellCommand(w http.ResponseWriter, r *http.Request) {
 	launch, _, ok := h.resolveIssueShellLaunch(w, r)
 	if !ok {
@@ -132,6 +150,17 @@ func (h *Handler) GetIssueShellCommand(w http.ResponseWriter, r *http.Request) {
 	}, launch.PriorWorkDir, nil)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if launch.SSHTarget != "" {
+		remoteCommand := renderShellCommand("posix", cliName, args, launch.PriorWorkDir)
+		writeJSON(w, http.StatusOK, IssueShellCommandResponse{
+			Command:   renderSSHShellCommand(launch.SSHTarget, remoteCommand),
+			WorkDir:   launch.PriorWorkDir,
+			Remote:    true,
+			SSHTarget: launch.SSHTarget,
+		})
 		return
 	}
 
@@ -189,6 +218,29 @@ func renderShellCommand(shell, cliName string, args []string, workDir string) st
 		}
 		return "cd " + shellQuote(workDir) + " && " + command
 	}
+}
+
+// renderSSHShellCommand wraps an already-composed POSIX remoteCommand
+// (built by renderShellCommand("posix", ...)) into an `ssh <target> -t
+// "<remoteCommand>"` invocation. -t forces a TTY allocation, required for
+// the provider CLI's interactive UI to render correctly over SSH.
+//
+// remoteCommand is embedded inside a double-quoted argument to the local
+// shell invoking ssh, so any backslash, double quote, `$`, or backtick it
+// contains must be escaped here or it would either break the local
+// shell's quoting or let the local shell interpolate/expand something
+// before ssh ever sees it. renderShellCommand's own posix quoting only
+// ever produces single-quoted argument values, so in practice none of
+// these appear — this escaping is defense in depth, not a case this
+// feature is expected to hit.
+func renderSSHShellCommand(sshTarget, remoteCommand string) string {
+	escaped := strings.NewReplacer(
+		`\`, `\\`,
+		`"`, `\"`,
+		`$`, `\$`,
+		"`", "\\`",
+	).Replace(remoteCommand)
+	return "ssh " + sshTarget + ` -t "` + escaped + `"`
 }
 
 // shellQuote wraps a value in single quotes for safe use in a POSIX
@@ -328,6 +380,10 @@ func (h *Handler) resolveIssueShellLaunch(w http.ResponseWriter, r *http.Request
 			runtimeOS = runtimeMeta.OS
 		}
 	}
+	sshTarget := ""
+	if runtime.SshTarget.Valid {
+		sshTarget = runtime.SshTarget.String
+	}
 
 	workspaceContext := ""
 	workspaceName := ""
@@ -390,6 +446,7 @@ func (h *Handler) resolveIssueShellLaunch(w http.ResponseWriter, r *http.Request
 		AgentName:           agent.Name,
 		Provider:            runtime.Provider,
 		RuntimeOS:           runtimeOS,
+		SSHTarget:           sshTarget,
 		Model:               model,
 		ThinkingLevel:       thinkingLevel,
 		CustomEnv:           customEnv,

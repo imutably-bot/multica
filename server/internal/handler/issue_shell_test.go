@@ -140,3 +140,38 @@ func TestRenderShellCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderSSHShellCommand(t *testing.T) {
+	tests := []struct {
+		name          string
+		sshTarget     string
+		remoteCommand string
+		want          string
+	}{
+		{
+			name:          "plain",
+			sshTarget:     "user@gamer-pc",
+			remoteCommand: `cd '/home/user/work' && 'codex' 'resume' 'sess-1'`,
+			want:          `ssh user@gamer-pc -t "cd '/home/user/work' && 'codex' 'resume' 'sess-1'"`,
+		},
+		{
+			name:          "host alias with no user@ prefix",
+			sshTarget:     "gamer-pc",
+			remoteCommand: `cd '/work' && 'claude'`,
+			want:          `ssh gamer-pc -t "cd '/work' && 'claude'"`,
+		},
+		{
+			name:          "embedded double quote and dollar sign are escaped for the local shell",
+			sshTarget:     "user@host",
+			remoteCommand: `cd '/work "quoted" $HOME' && 'claude'`,
+			want:          `ssh user@host -t "cd '/work \"quoted\" \$HOME' && 'claude'"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := renderSSHShellCommand(tt.sshTarget, tt.remoteCommand); got != tt.want {
+				t.Errorf("renderSSHShellCommand(%q, %q) = %q, want %q", tt.sshTarget, tt.remoteCommand, got, tt.want)
+			}
+		})
+	}
+}

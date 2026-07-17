@@ -265,7 +265,7 @@ func (q *Queries) FailTasksForOfflineRuntimes(ctx context.Context) ([]AgentTaskQ
 }
 
 const findLegacyRuntimesByDaemonID = `-- name: FindLegacyRuntimesByDaemonID :many
-SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id FROM agent_runtime
+SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target FROM agent_runtime
 WHERE workspace_id = $1
   AND provider = $2
   AND LOWER(daemon_id) = LOWER($3)
@@ -318,6 +318,7 @@ func (q *Queries) FindLegacyRuntimesByDaemonID(ctx context.Context, arg FindLega
 			&i.LegacyDaemonID,
 			&i.Visibility,
 			&i.ProfileID,
+			&i.SshTarget,
 		); err != nil {
 			return nil, err
 		}
@@ -377,7 +378,7 @@ func (q *Queries) ForceOfflineRuntimesByIDs(ctx context.Context, runtimeIds []pg
 }
 
 const getAgentRuntime = `-- name: GetAgentRuntime :one
-SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id FROM agent_runtime
+SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target FROM agent_runtime
 WHERE id = $1
 `
 
@@ -401,12 +402,13 @@ func (q *Queries) GetAgentRuntime(ctx context.Context, id pgtype.UUID) (AgentRun
 		&i.LegacyDaemonID,
 		&i.Visibility,
 		&i.ProfileID,
+		&i.SshTarget,
 	)
 	return i, err
 }
 
 const getAgentRuntimeForWorkspace = `-- name: GetAgentRuntimeForWorkspace :one
-SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id FROM agent_runtime
+SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target FROM agent_runtime
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -435,12 +437,13 @@ func (q *Queries) GetAgentRuntimeForWorkspace(ctx context.Context, arg GetAgentR
 		&i.LegacyDaemonID,
 		&i.Visibility,
 		&i.ProfileID,
+		&i.SshTarget,
 	)
 	return i, err
 }
 
 const listAgentRuntimes = `-- name: ListAgentRuntimes :many
-SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id FROM agent_runtime
+SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target FROM agent_runtime
 WHERE workspace_id = $1
 ORDER BY created_at ASC
 `
@@ -471,6 +474,7 @@ func (q *Queries) ListAgentRuntimes(ctx context.Context, workspaceID pgtype.UUID
 			&i.LegacyDaemonID,
 			&i.Visibility,
 			&i.ProfileID,
+			&i.SshTarget,
 		); err != nil {
 			return nil, err
 		}
@@ -483,7 +487,7 @@ func (q *Queries) ListAgentRuntimes(ctx context.Context, workspaceID pgtype.UUID
 }
 
 const listAgentRuntimesByOwner = `-- name: ListAgentRuntimesByOwner :many
-SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id FROM agent_runtime
+SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target FROM agent_runtime
 WHERE workspace_id = $1 AND owner_id = $2
 ORDER BY created_at ASC
 `
@@ -519,6 +523,7 @@ func (q *Queries) ListAgentRuntimesByOwner(ctx context.Context, arg ListAgentRun
 			&i.LegacyDaemonID,
 			&i.Visibility,
 			&i.ProfileID,
+			&i.SshTarget,
 		); err != nil {
 			return nil, err
 		}
@@ -558,7 +563,7 @@ func (q *Queries) ListArchivedAgentIDsByRuntime(ctx context.Context, runtimeID p
 }
 
 const lockAgentRuntime = `-- name: LockAgentRuntime :one
-SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id FROM agent_runtime
+SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target FROM agent_runtime
 WHERE id = $1
 FOR UPDATE
 `
@@ -597,6 +602,7 @@ func (q *Queries) LockAgentRuntime(ctx context.Context, id pgtype.UUID) (AgentRu
 		&i.LegacyDaemonID,
 		&i.Visibility,
 		&i.ProfileID,
+		&i.SshTarget,
 	)
 	return i, err
 }
@@ -605,7 +611,7 @@ const markAgentRuntimeOnline = `-- name: MarkAgentRuntimeOnline :one
 UPDATE agent_runtime
 SET status = 'online', last_seen_at = now(), updated_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id
+RETURNING id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target
 `
 
 // Used on the offline→online transition (and on first heartbeat after
@@ -631,6 +637,7 @@ func (q *Queries) MarkAgentRuntimeOnline(ctx context.Context, id pgtype.UUID) (A
 		&i.LegacyDaemonID,
 		&i.Visibility,
 		&i.ProfileID,
+		&i.SshTarget,
 	)
 	return i, err
 }
@@ -879,11 +886,52 @@ func (q *Queries) TouchAgentRuntimesLastSeenBatch(ctx context.Context, ids []pgt
 	return result.RowsAffected(), nil
 }
 
+const updateAgentRuntimeSSHTarget = `-- name: UpdateAgentRuntimeSSHTarget :one
+UPDATE agent_runtime
+SET ssh_target = $1, updated_at = now()
+WHERE id = $2
+RETURNING id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target
+`
+
+type UpdateAgentRuntimeSSHTargetParams struct {
+	SshTarget pgtype.Text `json:"ssh_target"`
+	ID        pgtype.UUID `json:"id"`
+}
+
+// Sets (or clears, when @ssh_target is NULL) the opt-in `user@host:port`
+// SSH target an operator has confirmed is reachable for this runtime. See
+// migration 135: this is never inferred by the server or asserted by the
+// daemon, only set explicitly via `multica runtime set-ssh-target`.
+func (q *Queries) UpdateAgentRuntimeSSHTarget(ctx context.Context, arg UpdateAgentRuntimeSSHTargetParams) (AgentRuntime, error) {
+	row := q.db.QueryRow(ctx, updateAgentRuntimeSSHTarget, arg.SshTarget, arg.ID)
+	var i AgentRuntime
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.DaemonID,
+		&i.Name,
+		&i.RuntimeMode,
+		&i.Provider,
+		&i.Status,
+		&i.DeviceInfo,
+		&i.Metadata,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OwnerID,
+		&i.LegacyDaemonID,
+		&i.Visibility,
+		&i.ProfileID,
+		&i.SshTarget,
+	)
+	return i, err
+}
+
 const updateAgentRuntimeVisibility = `-- name: UpdateAgentRuntimeVisibility :one
 UPDATE agent_runtime
 SET visibility = $1, updated_at = now()
 WHERE id = $2
-RETURNING id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id
+RETURNING id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target
 `
 
 type UpdateAgentRuntimeVisibilityParams struct {
@@ -915,6 +963,7 @@ func (q *Queries) UpdateAgentRuntimeVisibility(ctx context.Context, arg UpdateAg
 		&i.LegacyDaemonID,
 		&i.Visibility,
 		&i.ProfileID,
+		&i.SshTarget,
 	)
 	return i, err
 }
@@ -942,7 +991,7 @@ DO UPDATE SET
     owner_id = COALESCE(EXCLUDED.owner_id, agent_runtime.owner_id),
     last_seen_at = now(),
     updated_at = now()
-RETURNING id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, (xmax = 0) AS inserted
+RETURNING id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target, (xmax = 0) AS inserted
 `
 
 type UpsertAgentRuntimeParams struct {
@@ -974,6 +1023,7 @@ type UpsertAgentRuntimeRow struct {
 	LegacyDaemonID pgtype.Text        `json:"legacy_daemon_id"`
 	Visibility     string             `json:"visibility"`
 	ProfileID      pgtype.UUID        `json:"profile_id"`
+	SshTarget      pgtype.Text        `json:"ssh_target"`
 	Inserted       bool               `json:"inserted"`
 }
 
@@ -1014,6 +1064,7 @@ func (q *Queries) UpsertAgentRuntime(ctx context.Context, arg UpsertAgentRuntime
 		&i.LegacyDaemonID,
 		&i.Visibility,
 		&i.ProfileID,
+		&i.SshTarget,
 		&i.Inserted,
 	)
 	return i, err
@@ -1044,7 +1095,7 @@ DO UPDATE SET
     owner_id = COALESCE(EXCLUDED.owner_id, agent_runtime.owner_id),
     last_seen_at = now(),
     updated_at = now()
-RETURNING id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, (xmax = 0) AS inserted
+RETURNING id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, ssh_target, (xmax = 0) AS inserted
 `
 
 type UpsertAgentRuntimeWithProfileParams struct {
@@ -1077,6 +1128,7 @@ type UpsertAgentRuntimeWithProfileRow struct {
 	LegacyDaemonID pgtype.Text        `json:"legacy_daemon_id"`
 	Visibility     string             `json:"visibility"`
 	ProfileID      pgtype.UUID        `json:"profile_id"`
+	SshTarget      pgtype.Text        `json:"ssh_target"`
 	Inserted       bool               `json:"inserted"`
 }
 
@@ -1118,6 +1170,7 @@ func (q *Queries) UpsertAgentRuntimeWithProfile(ctx context.Context, arg UpsertA
 		&i.LegacyDaemonID,
 		&i.Visibility,
 		&i.ProfileID,
+		&i.SshTarget,
 		&i.Inserted,
 	)
 	return i, err

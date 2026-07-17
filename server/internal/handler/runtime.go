@@ -35,7 +35,15 @@ type AgentRuntimeResponse struct {
 	Visibility string `json:"visibility"`
 	// ProfileID is set when this runtime is an instance of a custom
 	// runtime_profile (MUL-3284); null for built-in runtimes.
-	ProfileID  *string `json:"profile_id"`
+	ProfileID *string `json:"profile_id"`
+	// SSHTarget is an opt-in `user@host:port` set by an operator who has
+	// confirmed this runtime machine is reachable over SSH from outside
+	// the network the daemon runs on. Null (the default) means the
+	// server has no reachable address for this runtime — see migration
+	// 135 and KHI-677. When set, the issue-shell copy-command endpoint
+	// renders an `ssh <target> -t "..."` command instead of the
+	// same-machine-only one.
+	SSHTarget  *string `json:"ssh_target"`
 	LastSeenAt *string `json:"last_seen_at"`
 	CreatedAt  string  `json:"created_at"`
 	UpdatedAt  string  `json:"updated_at"`
@@ -64,6 +72,7 @@ func runtimeToResponse(rt db.AgentRuntime) AgentRuntimeResponse {
 		OwnerID:      uuidToPtr(rt.OwnerID),
 		Visibility:   rt.Visibility,
 		ProfileID:    uuidToPtr(rt.ProfileID),
+		SSHTarget:    textToPtr(rt.SshTarget),
 		LastSeenAt:   timestampToPtr(rt.LastSeenAt),
 		CreatedAt:    timestampToString(rt.CreatedAt),
 		UpdatedAt:    timestampToString(rt.UpdatedAt),
@@ -406,6 +415,13 @@ type UpdateAgentRuntimeRequest struct {
 	// or workspace admins can bind agents) and "public" (any workspace
 	// member can). Owner / workspace admin only, gated by canEditRuntime.
 	Visibility *string `json:"visibility,omitempty"`
+	// SSHTarget sets (non-empty) or clears (empty string) the opt-in
+	// `user@host:port` this runtime is reachable at over SSH. Nil means
+	// "don't touch it" (distinct from "" which clears it). Owner /
+	// workspace admin only, gated by canEditRuntime — same as Visibility,
+	// since misconfiguring another user's runtime's SSH target could
+	// point them at a host they don't control.
+	SSHTarget *string `json:"ssh_target,omitempty"`
 }
 
 // UpdateAgentRuntime handles PATCH /api/runtimes/:id. Currently visibility
@@ -470,6 +486,34 @@ func (h *Handler) UpdateAgentRuntime(w http.ResponseWriter, r *http.Request) {
 		// Notify connected clients that runtime metadata changed so the
 		// list/detail pages refresh — matches the pattern used by
 		// DeleteAgentRuntime.
+		h.publish(protocol.EventDaemonRegister, uuidToString(rt.WorkspaceID), "member", uuidToString(member.UserID), map[string]any{
+			"action": "update",
+		})
+	}
+
+	if req.SSHTarget != nil {
+		// Deliberately not format-validated beyond "no newlines": the value
+		// is opaque to the server (it's copied verbatim into a rendered
+		// `ssh <target> ...` command — see GetIssueShellCommand). Callers may
+		// use `user@host`, `user@host:port` shorthand their own tooling
+		// understands, or a bare Host alias from their `~/.ssh/config` with
+		// no "@" at all. Newlines are rejected because they'd let the value
+		// break out of the single-line rendered command.
+		target := strings.TrimSpace(*req.SSHTarget)
+		if strings.ContainsAny(target, "\n\r") {
+			writeError(w, http.StatusBadRequest, "ssh_target must not contain newlines")
+			return
+		}
+		updated, err := h.Queries.UpdateAgentRuntimeSSHTarget(r.Context(), db.UpdateAgentRuntimeSSHTargetParams{
+			ID:        runtimeUUID,
+			SshTarget: util.StrToText(target),
+		})
+		if err != nil {
+			slog.Error("UpdateAgentRuntimeSSHTarget failed", "error", err, "runtime_id", runtimeID)
+			writeError(w, http.StatusInternalServerError, "failed to update runtime")
+			return
+		}
+		rt = updated
 		h.publish(protocol.EventDaemonRegister, uuidToString(rt.WorkspaceID), "member", uuidToString(member.UserID), map[string]any{
 			"action": "update",
 		})

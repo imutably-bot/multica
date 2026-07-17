@@ -28,7 +28,12 @@ type IssueShellLaunch struct {
 	// RuntimeOS is the daemon machine's reported OS ("windows", "linux",
 	// "darwin", ...) from its most recent registration; empty when the
 	// daemon predates KHI-542's os field or the metadata failed to parse.
-	RuntimeOS           string
+	RuntimeOS string
+	// SSHTarget is the runtime's opt-in `user@host:port`, set by an
+	// operator via `multica runtime set-ssh-target` (KHI-677); empty
+	// when unset, which is the common case and falls back to the
+	// same-machine-only copy command.
+	SSHTarget           string
 	Model               string
 	ThinkingLevel       string
 	CustomEnv           map[string]string
