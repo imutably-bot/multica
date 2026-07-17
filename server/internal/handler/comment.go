@@ -1309,13 +1309,26 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 	groupedAtt := h.groupAttachments(r, []pgtype.UUID{comment.ID})
 	resp := commentToResponse(comment, nil, groupedAtt[uuidToString(comment.ID)])
 	slog.Info("comment created", append(logger.RequestAttrs(r), "comment_id", uuidToString(comment.ID), "issue_id", issueID)...)
-	h.publish(protocol.EventCommentCreated, uuidToString(issue.WorkspaceID), authorType, authorID, map[string]any{
+	updatedAt, err := h.Queries.TouchIssueUpdatedAt(r.Context(), db.TouchIssueUpdatedAtParams{
+		ID:          issue.ID,
+		WorkspaceID: issue.WorkspaceID,
+	})
+	payload := map[string]any{
 		"comment":             resp,
 		"issue_title":         issue.Title,
 		"issue_assignee_type": textToPtr(issue.AssigneeType),
 		"issue_assignee_id":   uuidToPtr(issue.AssigneeID),
 		"issue_status":        issue.Status,
-	})
+	}
+	if err != nil {
+		slog.Warn("touch issue after comment failed", append(logger.RequestAttrs(r),
+			"error", err,
+			"issue_id", issueID,
+		)...)
+	} else {
+		payload["issue_updated_at"] = timestampToString(updatedAt)
+	}
+	h.publish(protocol.EventCommentCreated, uuidToString(issue.WorkspaceID), authorType, authorID, payload)
 
 	// A reply in a resolved thread re-opens it. Done after CreateComment commits
 	// so the reply is visible regardless of the unresolve outcome. Shared with

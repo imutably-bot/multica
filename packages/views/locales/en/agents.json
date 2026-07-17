@@ -214,6 +214,7 @@
     "activity": "Activity",
     "tasks": "Tasks",
     "instructions": "Instructions",
+    "prompt_templates": "Prompt Templates",
     "skills": "Skills",
     "environment": "Environment",
     "custom_args": "Custom Args",

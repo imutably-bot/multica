@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/multica-ai/multica/server/internal/prompttmpl"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
 )
 
@@ -261,6 +262,44 @@ func TestCommentTriggeredBriefResumedNoDeltaSkipsDefaultThreadRead(t *testing.T)
 	}
 	if strings.Contains(out, "Read the triggering conversation first") {
 		t.Errorf("resumed/no-delta brief must not use the cold-start forced-read wording, got:\n%s", out)
+	}
+}
+
+func TestRuntimeBriefUsesCustomSectionTemplates(t *testing.T) {
+	t.Parallel()
+
+	out := buildMetaSkillContent("claude", TaskContextForEnv{
+		IssueID:                          "11111111-2222-3333-4444-555555555555",
+		AgentName:                        "CustomAgent",
+		AgentInstructions:                "Follow local policy.",
+		RequestingUserName:               "Taylor",
+		RequestingUserProfileDescription: "prefers short updates",
+		ConnectedApps: []runtimeapps.ConnectedApp{
+			{ToolkitName: "GitHub", ToolkitSlug: "github", ServerName: "mcp-github"},
+		},
+		PromptTemplates: map[string]string{
+			prompttmpl.AgentIdentityKey:  "Agent block override\n{{agent_name_block}}{{agent_instructions_block}}",
+			prompttmpl.RequestingUserKey: "Requesting user override\n{{requesting_user_intro}}{{requesting_user_description_block}}",
+			prompttmpl.ConnectedAppsKey:  "Connected apps override\n{{connected_apps_list}}",
+			prompttmpl.WorkflowAssignKey: "Assignment override\n1. {{step_issue_get}}\n6. {{step_final_comment}}\n",
+		},
+	})
+
+	for _, want := range []string{
+		"Agent block override",
+		"Requesting user override",
+		"Connected apps override",
+		"Assignment override",
+		"**You are: CustomAgent**",
+		"Follow local policy.",
+		"> prefers short updates",
+		"- GitHub (`github`) via MCP server `mcp-github`",
+		"Run `multica issue get 11111111-2222-3333-4444-555555555555 --output json` to understand your task",
+		"`multica issue comment add 11111111-2222-3333-4444-555555555555`",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected custom runtime brief to contain %q\n\n%s", want, out)
+		}
 	}
 }
 
@@ -550,6 +589,68 @@ func TestWorkspaceContextHeadingSkippedWhenEmpty(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWorkspaceInitPromptRenderedWithVariablesAndDefaultFallback(t *testing.T) {
+	t.Parallel()
+
+	customCtx := TaskContextForEnv{
+		IssueID:             "issue-123",
+		TriggerCommentID:    "comment-456",
+		WorkspaceName:       "Acme Workspace",
+		WorkspaceInitPrompt: "Agent={{agent_name}} Workspace={{workspace_name}} Issue={{issue_id}} Chat={{chat_id}} User={{user_name}} Repo={{repo_url}} Type={{task_type}}",
+		AgentName:           "Codex",
+		InitiatorName:       "Requester",
+		RequestingUserName:  "Owner",
+		Repos:               []RepoContextForEnv{{URL: "https://github.com/acme/repo"}},
+	}
+
+	checkCustom := func(t *testing.T, label string) {
+		out := buildMetaSkillContent("claude", customCtx)
+		for _, want := range []string{
+			"## Init Prompt",
+			"Agent=Codex",
+			"Workspace=Acme Workspace",
+			"Issue=issue-123",
+			"Chat=",
+			"User=Requester",
+			"Repo=https://github.com/acme/repo",
+			"Type=comment",
+		} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("%s brief missing %q\n---\n%s", label, want, out)
+			}
+		}
+		for _, banned := range []string{"{{agent_name}}", "{{workspace_name}}", "{{issue_id}}", "{{chat_id}}", "{{user_name}}", "{{repo_url}}", "{{task_type}}"} {
+			if strings.Contains(out, banned) {
+				t.Fatalf("%s brief left template token %q unrendered\n---\n%s", label, banned, out)
+			}
+		}
+		if idx := strings.Index(out, "## Init Prompt"); idx < 0 {
+			t.Fatalf("%s brief missing init prompt heading", label)
+		}
+	}
+
+	t.Run("legacy", func(t *testing.T) { checkCustom(t, "legacy") })
+	t.Run("slim", func(t *testing.T) {
+		withSlimBrief(t)
+		checkCustom(t, "slim")
+	})
+
+	t.Run("default fallback", func(t *testing.T) {
+		out := buildMetaSkillContent("claude", TaskContextForEnv{
+			IssueID:            "issue-789",
+			WorkspaceName:      "Fallback Workspace",
+			AgentName:          "FallbackAgent",
+			RequestingUserName: "Owner",
+		})
+		if !strings.Contains(out, "You are FallbackAgent, an AI agent that helps users in Fallback Workspace.") {
+			t.Fatalf("default init prompt must render the built-in template, got:\n%s", out)
+		}
+		if !strings.Contains(out, "## Init Prompt") {
+			t.Fatalf("default init prompt should still emit the heading, got:\n%s", out)
+		}
+	})
 }
 
 func TestConnectedAppsRenderedAcrossBriefModes(t *testing.T) {

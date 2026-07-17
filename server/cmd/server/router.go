@@ -801,6 +801,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.RequireWorkspaceMemberFromURL(queries, "id"))
 					r.Get("/", h.GetWorkspace)
+					r.Get("/prompt-templates", h.GetWorkspacePromptTemplates)
 					r.Get("/members", h.ListMembersWithUser)
 					r.Post("/leave", h.LeaveWorkspace)
 					r.Get("/invitations", h.ListWorkspaceInvitations)
@@ -1114,6 +1115,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			// Agents
 			r.Route("/api/agents", func(r chi.Router) {
 				r.Get("/", h.ListAgents)
+				r.Get("/search", h.SearchAgents)
 				r.Post("/", h.CreateAgent)
 				// Agent templates: pre-configured instructions + skill refs.
 				// Picking a template imports the referenced skills into the
@@ -1122,6 +1124,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Post("/from-template", h.CreateAgentFromTemplate)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetAgent)
+					r.Get("/prompt-templates", h.GetAgentPromptTemplates)
 					r.Put("/", h.UpdateAgent)
 					r.Post("/archive", h.ArchiveAgent)
 					r.Post("/restore", h.RestoreAgent)

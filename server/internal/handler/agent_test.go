@@ -930,6 +930,69 @@ func insertHandlerTestTask(t *testing.T, agentID string) string {
 	return taskID
 }
 
+func TestSearchAgentsWildcard(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("database not available")
+	}
+
+	// Create test agents
+	agent1 := createHandlerTestAgent(t, "wild-agent-one", nil)
+	agent2 := createHandlerTestAgent(t, "wild-agent-two", nil)
+	agent3 := createHandlerTestAgent(t, "simple-agent", nil)
+	_ = agent3
+
+	// Query with wildcard '*' matching suffix
+	w := httptest.NewRecorder()
+	req := newRequest(http.MethodGet, "/api/agents/search?q=wild-agent*", nil)
+	testHandler.SearchAgents(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Agents []AgentResponse `json:"agents"`
+		Total  int             `json:"total"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// Should match wild-agent-one and wild-agent-two, but not simple-agent
+	var matched1, matched2, matched3 bool
+	for _, a := range resp.Agents {
+		if a.ID == agent1 {
+			matched1 = true
+		}
+		if a.ID == agent2 {
+			matched2 = true
+		}
+		if a.ID == agent3 {
+			matched3 = true
+		}
+	}
+	if !matched1 || !matched2 || matched3 {
+		t.Errorf("wildcard match wild-agent* returned unexpected agents: matched1=%v, matched2=%v, matched3=%v", matched1, matched2, matched3)
+	}
+
+	// Query with wildcard '?'
+	w2 := httptest.NewRecorder()
+	req2 := newRequest(http.MethodGet, "/api/agents/search?q=wild-agent-on?", nil)
+	testHandler.SearchAgents(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w2.Code)
+	}
+
+	var resp2 struct {
+		Agents []AgentResponse `json:"agents"`
+	}
+	if err := json.NewDecoder(w2.Body).Decode(&resp2); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp2.Agents) != 1 || resp2.Agents[0].ID != agent1 {
+		t.Errorf("wildcard match with ? failed, expected agent %s, got %d agents", agent1, len(resp2.Agents))
+	}
+}
+
 // Defence-in-depth: spot-check that the package compiles a small
 // fmt.Sprintf so accidental imports stay tidy.
 var _ = fmt.Sprintf

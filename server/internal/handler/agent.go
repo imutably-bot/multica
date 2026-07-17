@@ -19,6 +19,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/analytics"
 	"github.com/multica-ai/multica/server/internal/logger"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
+	"github.com/multica-ai/multica/server/internal/prompttmpl"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/pkg/agent"
@@ -263,40 +264,48 @@ type ProjectResourceData struct {
 type ConnectedAppData = runtimeapps.ConnectedApp
 
 type AgentTaskResponse struct {
-	ID          string `json:"id"`
-	AgentID     string `json:"agent_id"`
-	RuntimeID   string `json:"runtime_id"`
-	IssueID     string `json:"issue_id"`
-	WorkspaceID string `json:"workspace_id"`
+	ID            string `json:"id"`
+	AgentID       string `json:"agent_id"`
+	RuntimeID     string `json:"runtime_id"`
+	IssueID       string `json:"issue_id"`
+	WorkspaceID   string `json:"workspace_id"`
+	WorkspaceName string `json:"workspace_name,omitempty"`
+	// PromptTemplates is the effective prompt-template map after applying
+	// repo defaults, workspace overrides, and agent overrides.
+	PromptTemplates map[string]string `json:"prompt_templates,omitempty"`
 	// WorkspaceContext is the workspace-level system prompt set in workspace
 	// settings (`workspace.context` DB column). Injected into the agent brief
 	// as `## Workspace Context` so every agent running in this workspace —
 	// regardless of issue / chat / autopilot / quick-create — sees the same
 	// shared context. Empty when the workspace owner hasn't set it.
-	WorkspaceContext   string                `json:"workspace_context,omitempty"`
-	ThreadName         string                `json:"thread_name,omitempty"` // semantic title for provider-native session/thread history
-	Status             string                `json:"status"`
-	Priority           int32                 `json:"priority"`
-	DispatchedAt       *string               `json:"dispatched_at"`
-	StartedAt          *string               `json:"started_at"`
-	CompletedAt        *string               `json:"completed_at"`
-	Result             any                   `json:"result"`
-	Error              *string               `json:"error"`
-	FailureReason      string                `json:"failure_reason,omitempty"` // see TaskService.MaybeRetryFailedTask
-	Attempt            int32                 `json:"attempt"`
-	MaxAttempts        int32                 `json:"max_attempts"`
-	ParentTaskID       *string               `json:"parent_task_id,omitempty"`
-	Agent              *TaskAgentData        `json:"agent,omitempty"`
-	ConnectedApps      []ConnectedAppData    `json:"connected_apps,omitempty"` // daemon-claim only: per-run app capabilities mounted through runtime MCP overlays
-	Repos              []RepoData            `json:"repos,omitempty"`
-	ProjectID          string                `json:"project_id,omitempty"`          // issue's project, when present
-	ProjectTitle       string                `json:"project_title,omitempty"`       // for surfacing in agent context
-	ProjectDescription string                `json:"project_description,omitempty"` // durable project-level context injected into the brief
-	ProjectResources   []ProjectResourceData `json:"project_resources,omitempty"`   // resources attached to the project
-	CreatedAt          string                `json:"created_at"`
-	PriorSessionID     string                `json:"prior_session_id,omitempty"` // session ID from a previous task on same issue
-	PriorWorkDir       string                `json:"prior_work_dir,omitempty"`   // work_dir from a previous task on same issue
-	WorkDir            string                `json:"work_dir,omitempty"`         // local working directory pinned for this task; populated once the daemon reports it
+	WorkspaceContext string `json:"workspace_context,omitempty"`
+	// WorkspaceInitPrompt is the short workspace-level init prompt configured
+	// in Settings → Agent settings. Injected into the brief after variable
+	// interpolation so each task starts from the same lightweight base prompt.
+	WorkspaceInitPrompt string                `json:"workspace_init_prompt,omitempty"`
+	ThreadName          string                `json:"thread_name,omitempty"` // semantic title for provider-native session/thread history
+	Status              string                `json:"status"`
+	Priority            int32                 `json:"priority"`
+	DispatchedAt        *string               `json:"dispatched_at"`
+	StartedAt           *string               `json:"started_at"`
+	CompletedAt         *string               `json:"completed_at"`
+	Result              any                   `json:"result"`
+	Error               *string               `json:"error"`
+	FailureReason       string                `json:"failure_reason,omitempty"` // see TaskService.MaybeRetryFailedTask
+	Attempt             int32                 `json:"attempt"`
+	MaxAttempts         int32                 `json:"max_attempts"`
+	ParentTaskID        *string               `json:"parent_task_id,omitempty"`
+	Agent               *TaskAgentData        `json:"agent,omitempty"`
+	ConnectedApps       []ConnectedAppData    `json:"connected_apps,omitempty"` // daemon-claim only: per-run app capabilities mounted through runtime MCP overlays
+	Repos               []RepoData            `json:"repos,omitempty"`
+	ProjectID           string                `json:"project_id,omitempty"`          // issue's project, when present
+	ProjectTitle        string                `json:"project_title,omitempty"`       // for surfacing in agent context
+	ProjectDescription  string                `json:"project_description,omitempty"` // durable project-level context injected into the brief
+	ProjectResources    []ProjectResourceData `json:"project_resources,omitempty"`   // resources attached to the project
+	CreatedAt           string                `json:"created_at"`
+	PriorSessionID      string                `json:"prior_session_id,omitempty"` // session ID from a previous task on same issue
+	PriorWorkDir        string                `json:"prior_work_dir,omitempty"`   // work_dir from a previous task on same issue
+	WorkDir             string                `json:"work_dir,omitempty"`         // local working directory pinned for this task; populated once the daemon reports it
 	// RelativeWorkDir is a privacy-safe display form of WorkDir intended for
 	// the UI. For standard tasks it strips the daemon's workspaces root so
 	// the user sees `<wsUUID>/<taskShort>/workdir`; for local_directory
@@ -679,6 +688,104 @@ func (h *Handler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, visible)
+}
+
+func (h *Handler) SearchAgents(w http.ResponseWriter, r *http.Request) {
+	workspaceID := h.resolveWorkspaceID(r)
+	member, ok := h.workspaceMember(w, r, workspaceID)
+	if !ok {
+		return
+	}
+	userID := requestUserID(r)
+
+	q := r.URL.Query().Get("q")
+	includeArchived := r.URL.Query().Get("include_archived") == "true"
+
+	var pattern string
+	if !strings.Contains(q, "*") && !strings.Contains(q, "?") {
+		pattern = "%" + escapeLikeWithWildcards(q) + "%"
+	} else {
+		pattern = escapeLikeWithWildcards(q)
+	}
+	pattern = strings.ToLower(pattern)
+
+	agents, err := h.Queries.SearchAgents(r.Context(), db.SearchAgentsParams{
+		WorkspaceID:     parseUUID(workspaceID),
+		Name:            pattern,
+		IncludeArchived: includeArchived,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to search agents")
+		return
+	}
+
+	// Batch-load skills for all agents to avoid N+1.
+	skillRows, err := h.Queries.ListAgentSkillsByWorkspace(r.Context(), parseUUID(workspaceID))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load agent skills")
+		return
+	}
+	skillMap := map[string][]AgentSkillSummary{}
+	for _, row := range skillRows {
+		agentID := uuidToString(row.AgentID)
+		skillMap[agentID] = append(skillMap[agentID], AgentSkillSummary{
+			ID:          uuidToString(row.ID),
+			Name:        row.Name,
+			Description: row.Description,
+		})
+	}
+
+	ws, err := h.Queries.GetWorkspace(r.Context(), parseUUID(workspaceID))
+	if err != nil {
+		slog.Warn("GetWorkspace failed for redact check", "workspace_id", workspaceID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	alwaysRedact := workspaceAlwaysRedactSecrets(ws.Settings)
+
+	actorType, actorID := h.resolveActor(r, userID, workspaceID)
+	targetsByAgent, ok := h.loadInvocationTargetsByAgent(r.Context(), agents)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "failed to load agent invocation targets")
+		return
+	}
+	visible := make([]AgentResponse, 0, len(agents))
+	for _, a := range agents {
+		targets := targetsByAgent[uuidToString(a.ID)]
+		if actorType == "member" {
+			if !memberAllowedToViewAgent(a, targets, actorID, member.Role) {
+				continue
+			}
+		}
+		resp := agentToResponse(a)
+		applyInvocationTargetsToResponse(&resp, targets)
+		if skills, ok := skillMap[resp.ID]; ok {
+			resp.Skills = skills
+		}
+		if actorType == "agent" || alwaysRedact || !canViewAgentSecrets(a, userID, member.Role) {
+			redactMcpConfig(&resp)
+		}
+		if !h.composioMCPAppsEnabled(r.Context()) {
+			suppressComposioToolkitAllowlist(&resp)
+		} else if actorType == "agent" || uuidToString(a.OwnerID) != userID {
+			redactComposioToolkitAllowlist(&resp)
+		}
+		visible = append(visible, resp)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"agents": visible,
+		"total":  len(visible),
+	})
+}
+
+func escapeLikeWithWildcards(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	s = strings.ReplaceAll(s, `*`, `%`)
+	s = strings.ReplaceAll(s, `?`, `_`)
+	return s
 }
 
 func (h *Handler) GetAgent(w http.ResponseWriter, r *http.Request) {
@@ -1262,6 +1369,12 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 		params.AvatarUrl = pgtype.Text{String: *req.AvatarURL, Valid: true}
 	}
 	if req.RuntimeConfig != nil {
+		if root, ok := req.RuntimeConfig.(map[string]any); ok {
+			if err := prompttmpl.ValidateOverridesFromObject(root, prompttmpl.ScopeAgent); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
 		// Restore the persisted gateway token when the request submitted the
 		// public mask sentinel. Without this, a UI that GETs the agent and
 		// PATCHes the same payload back round-trips "***" into the database

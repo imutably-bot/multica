@@ -1,0 +1,1 @@
+ALTER TABLE workspace ADD COLUMN init_prompt TEXT NOT NULL DEFAULT '';

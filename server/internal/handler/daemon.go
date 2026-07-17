@@ -23,6 +23,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/middleware"
+	"github.com/multica-ai/multica/server/internal/prompttmpl"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -1916,8 +1917,21 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 	// shared context. Empty string when the owner hasn't set one; the daemon
 	// skips rendering the heading in that case.
 	if ws, err := h.Queries.GetWorkspace(r.Context(), parseUUID(resp.WorkspaceID)); err == nil {
+		resp.WorkspaceName = ws.Name
 		if ws.Context.Valid {
 			resp.WorkspaceContext = ws.Context.String
+		}
+		resp.WorkspaceInitPrompt = prompttmpl.EffectiveTemplates(
+			prompttmpl.ExtractWorkspaceOverridesFromRaw(ws.Settings, ""),
+			nil,
+		)[prompttmpl.WorkspaceInitKey]
+		if resp.Agent != nil {
+			resp.PromptTemplates = effectivePromptTemplates(ws, db.Agent{RuntimeConfig: resp.Agent.RuntimeConfig})
+		} else {
+			resp.PromptTemplates = prompttmpl.EffectiveTemplates(
+				prompttmpl.ExtractWorkspaceOverridesFromRaw(ws.Settings, ""),
+				map[string]string{},
+			)
 		}
 	} else {
 		slog.Warn("task claim: failed to load workspace for context injection",
