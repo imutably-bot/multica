@@ -344,7 +344,7 @@ function LeaderPicker({
                       }}
                     >
                       <ActorAvatar actorType="agent" actorId={a.id} size={18} showStatusDot />
-                      <span className="truncate">{a.name}</span>
+                      <span className="whitespace-normal break-all">{a.name}</span>
                     </PickerItem>
                   ))}
                 </PickerSection>
@@ -362,7 +362,7 @@ function LeaderPicker({
                       }}
                     >
                       <ActorAvatar actorType="agent" actorId={a.id} size={18} showStatusDot />
-                      <span className="truncate">{a.name}</span>
+                      <span className="whitespace-normal break-all">{a.name}</span>
                     </PickerItem>
                   ))}
                 </PickerSection>
@@ -536,7 +536,7 @@ function AdditionalMembersPicker({
                     }
                   >
                     <ActorAvatar actorType="agent" actorId={a.id} size={18} showStatusDot />
-                    <span className="truncate">{a.name}</span>
+                    <span className="whitespace-normal break-all">{a.name}</span>
                   </PickerItem>
                 ))}
               </PickerSection>
@@ -552,7 +552,7 @@ function AdditionalMembersPicker({
                     }
                   >
                     <ActorAvatar actorType="agent" actorId={a.id} size={18} showStatusDot />
-                    <span className="truncate">{a.name}</span>
+                    <span className="whitespace-normal break-all">{a.name}</span>
                   </PickerItem>
                 ))}
               </PickerSection>
@@ -568,7 +568,7 @@ function AdditionalMembersPicker({
                     }
                   >
                     <ActorAvatar actorType="member" actorId={m.user_id} size={18} />
-                    <span className="truncate">{m.name}</span>
+                    <span className="whitespace-normal break-all">{m.name}</span>
                   </PickerItem>
                 ))}
               </PickerSection>

@@ -944,7 +944,7 @@ function AgentPickerItem({
         enableHoverCard
         showStatusDot
       />
-      <span className="truncate flex-1">{agent.name}</span>
+      <span className="whitespace-normal break-all flex-1">{agent.name}</span>
     </PickerItem>
   );
 }

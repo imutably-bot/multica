@@ -164,7 +164,7 @@ export function AssigneePicker({
               }}
             >
               <ActorAvatar actorType="member" actorId={m.user_id} size={18} />
-              <span className="truncate">{m.name}</span>
+              <span className="whitespace-normal break-all">{m.name}</span>
             </PickerItem>
           ))}
         </PickerSection>
@@ -200,7 +200,7 @@ export function AssigneePicker({
                 }}
               >
                 <ActorAvatar actorType="agent" actorId={a.id} size={18} showStatusDot />
-                <span className={`truncate ${allowed ? "" : "text-muted-foreground"}`}>{a.name}</span>
+                <span className={`whitespace-normal break-all ${allowed ? "" : "text-muted-foreground"}`}>{a.name}</span>
                 {a.visibility === "private" && (
                   <Lock className="ml-auto h-3 w-3 text-muted-foreground" />
                 )}
@@ -227,7 +227,7 @@ export function AssigneePicker({
               }}
             >
               <ActorAvatar actorType="squad" actorId={s.id} size={18} />
-              <span className="truncate">{s.name}</span>
+              <span className="whitespace-normal break-all">{s.name}</span>
             </PickerItem>
           ))}
         </PickerSection>
