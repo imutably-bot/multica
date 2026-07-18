@@ -76,6 +76,7 @@ export function useIssueSurfaceData({
   creatorFilters,
   projectFilters,
   includeNoProject,
+  excludeProjectFilters,
   labelFilters,
   agentRunningFilter,
   showSubIssues,
@@ -94,6 +95,7 @@ export function useIssueSurfaceData({
   creatorFilters: IssueFilterState["creatorFilters"];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   agentRunningFilter: boolean;
   showSubIssues: boolean;
@@ -115,6 +117,7 @@ export function useIssueSurfaceData({
       creator_filters: creatorFilters,
       project_ids: projectFilters,
       include_no_project: includeNoProject,
+      exclude_project_ids: excludeProjectFilters,
       label_ids: labelFilters,
     }),
     [
@@ -122,6 +125,7 @@ export function useIssueSurfaceData({
       creatorFilters,
       includeNoAssignee,
       includeNoProject,
+      excludeProjectFilters,
       labelFilters,
       priorityFilters,
       projectFilters,
@@ -168,6 +172,7 @@ export function useIssueSurfaceData({
       creatorFilters,
       projectFilters,
       includeNoProject,
+      excludeProjectFilters,
       labelFilters,
       workingOnly: agentRunningFilter,
       showSubIssues,
@@ -259,6 +264,7 @@ export function useIssueSurfaceData({
       creatorFilters,
       projectFilters,
       includeNoProject,
+      excludeProjectFilters,
       labelFilters,
       agentRunningFilter,
       showSubIssues,
@@ -269,6 +275,7 @@ export function useIssueSurfaceData({
       creatorFilters,
       includeNoAssignee,
       includeNoProject,
+      excludeProjectFilters,
       labelFilters,
       priorityFilters,
       projectFilters,

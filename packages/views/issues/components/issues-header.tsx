@@ -12,6 +12,7 @@ import {
   Filter,
   FolderKanban,
   FolderMinus,
+  FolderX,
   List,
   SignalHigh,
   SlidersHorizontal,
@@ -73,7 +74,16 @@ import {
   type ViewMode,
 } from "@multica/core/issues/stores/view-store";
 import { useViewStore, useViewStoreApi } from "@multica/core/issues/stores/view-store-context";
-import { addDaysDateOnly, dateOnlyToLocalDate, formatDateOnly, toDateOnly, todayDateOnly } from "@multica/core/issues/date";
+import { useIssueSavedViewsStore } from "@multica/core/issues/stores";
+import { useNavigation } from "../../navigation";
+import { useWorkspacePaths } from "@multica/core/paths";
+import {
+  createRelativeIssueDateFilter,
+  dateOnlyToLocalDate,
+  formatDateOnly,
+  resolveIssueDateFilterRange,
+  toDateOnly,
+} from "@multica/core/issues/date";
 import {
   useIssuesScopeStore,
   type IssuesScope,
@@ -90,6 +100,8 @@ type LocalDateRange = {
   to?: Date;
 };
 
+type DatePresetOption = "today" | "last_3_days" | "last_7_days";
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -102,6 +114,7 @@ function getActiveFilterCount(state: {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   dateFilter?: IssueDateFilter | null;
 }) {
@@ -110,7 +123,7 @@ function getActiveFilterCount(state: {
   if (state.priorityFilters.length > 0) count++;
   if (state.assigneeFilters.length > 0 || state.includeNoAssignee) count++;
   if (state.creatorFilters.length > 0) count++;
-  if (state.projectFilters.length > 0 || state.includeNoProject) count++;
+  if (state.projectFilters.length > 0 || state.includeNoProject || state.excludeProjectFilters.length > 0) count++;
   if (state.labelFilters.length > 0) count++;
   if (state.dateFilter) count++;
   return count;
@@ -356,14 +369,18 @@ function ActorSubContent({
 function ProjectSubContent({
   counts,
   selected,
+  excluded,
   onToggle,
+  onToggleExclude,
   includeNoProject,
   onToggleNoProject,
   noProjectCount,
 }: {
   counts: Map<string, number>;
   selected: string[];
+  excluded: string[];
   onToggle: (projectId: string) => void;
+  onToggleExclude: (projectId: string) => void;
   includeNoProject: boolean;
   onToggleNoProject: () => void;
   noProjectCount: number;
@@ -405,7 +422,7 @@ function ProjectSubContent({
                 {noProjectCount}
               </span>
             )}
-          </DropdownMenuCheckboxItem>
+            </DropdownMenuCheckboxItem>
         )}
 
         {filtered.map((p) => {
@@ -420,6 +437,32 @@ function ProjectSubContent({
             >
               <HoverCheck checked={checked} />
               <ProjectIcon project={p} size="sm" />
+              <span className="truncate">{p.title}</span>
+              {count > 0 && (
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {count}
+                </span>
+              )}
+            </DropdownMenuCheckboxItem>
+          );
+        })}
+
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+          {t(($) => $.filters.exclude_project)}
+        </DropdownMenuLabel>
+        {filtered.map((p) => {
+          const checked = excluded.includes(p.id);
+          const count = counts.get(p.id) ?? 0;
+          return (
+            <DropdownMenuCheckboxItem
+              key={`exclude-${p.id}`}
+              checked={checked}
+              onCheckedChange={() => onToggleExclude(p.id)}
+              className={FILTER_ITEM_CLASS}
+            >
+              <HoverCheck checked={checked} />
+              <FolderX className="size-3.5 text-muted-foreground" />
               <span className="truncate">{p.title}</span>
               {count > 0 && (
                 <span className="ml-auto text-xs text-muted-foreground">
@@ -518,29 +561,53 @@ function DateSubContent({
 }) {
   const { t } = useT("issues");
   const [field, setField] = useState<IssueDateField>(value?.field ?? "created_at");
+  const [preset, setPreset] = useState<DatePresetOption | null>(() => {
+    if (!value?.preset) return null;
+    if (value.preset === "today") return "today";
+    if (value.preset === "last_days" && value.days === 7) return "last_7_days";
+    if (value.preset === "last_days" && value.days === 3) return "last_3_days";
+    return null;
+  });
   const [range, setRange] = useState<LocalDateRange | undefined>(() => {
-    if (!value) return undefined;
-    const from = dateOnlyToLocalDate(value.from);
+    const resolved = resolveIssueDateFilterRange(value);
+    if (!resolved) return undefined;
+    const from = dateOnlyToLocalDate(resolved.from);
     if (!from) return undefined;
-    return { from, to: dateOnlyToLocalDate(value.to) };
+    return { from, to: dateOnlyToLocalDate(resolved.to) };
   });
 
   const setFieldValue = (next: IssueDateField) => {
     setField(next);
-    if (value) onChange({ ...value, field: next });
+    if (!value) return;
+    if (value.preset) {
+      onChange(
+        createRelativeIssueDateFilter(
+          next,
+          value.preset,
+          value.days,
+        ),
+      );
+      return;
+    }
+    onChange({ ...value, field: next });
   };
 
-  const applyPreset = (days: 1 | 3 | 7) => {
-    onChange({
-      field,
-      from: addDaysDateOnly(1 - days),
-      to: todayDateOnly(),
-    });
+  const applyPreset = (nextPreset: "today" | "last_days", days?: number) => {
+    const next = createRelativeIssueDateFilter(field, nextPreset, days);
+    setPreset(nextPreset === "today" ? "today" : days === 7 ? "last_7_days" : "last_3_days");
+    const resolved = resolveIssueDateFilterRange(next);
+    if (resolved) {
+      const from = dateOnlyToLocalDate(resolved.from);
+      const to = dateOnlyToLocalDate(resolved.to);
+      setRange(from ? { from, to: to ?? from } : undefined);
+    }
+    onChange(next);
   };
 
   const applyCustom = () => {
     if (!range?.from) return;
     const [from, to] = normalizeDateRange(range.from, range.to ?? range.from);
+    setPreset(null);
     onChange({
       field,
       from: toDateOnly(from),
@@ -552,7 +619,10 @@ function DateSubContent({
     <>
       <DropdownMenuGroup>
         <DropdownMenuLabel>{t(($) => $.filters.date_field)}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={field} onValueChange={(next) => setFieldValue(next as IssueDateField)}>
+        <DropdownMenuRadioGroup
+          value={field}
+          onValueChange={(next) => setFieldValue(next as IssueDateField)}
+        >
           {(["created_at", "updated_at"] as const).map((option) => (
             <DropdownMenuRadioItem key={option} value={option}>
               {t(($) => $.filters[DATE_FIELD_LABEL_KEY[option]])}
@@ -562,15 +632,24 @@ function DateSubContent({
       </DropdownMenuGroup>
 
       <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={() => applyPreset(1)}>
-        {t(($) => $.filters.date_today)}
-      </DropdownMenuItem>
-      <DropdownMenuItem onClick={() => applyPreset(3)}>
-        {t(($) => $.filters.date_last_3_days)}
-      </DropdownMenuItem>
-      <DropdownMenuItem onClick={() => applyPreset(7)}>
-        {t(($) => $.filters.date_last_7_days)}
-      </DropdownMenuItem>
+      <DropdownMenuRadioGroup
+        value={preset ?? ""}
+        onValueChange={(next) => {
+          if (next === "today") applyPreset("today");
+          if (next === "last_3_days") applyPreset("last_days", 3);
+          if (next === "last_7_days") applyPreset("last_days", 7);
+        }}
+      >
+        <DropdownMenuRadioItem value="today">
+          {t(($) => $.filters.date_today)}
+        </DropdownMenuRadioItem>
+        <DropdownMenuRadioItem value="last_3_days">
+          {t(($) => $.filters.date_last_3_days)}
+        </DropdownMenuRadioItem>
+        <DropdownMenuRadioItem value="last_7_days">
+          {t(($) => $.filters.date_last_7_days)}
+        </DropdownMenuRadioItem>
+      </DropdownMenuRadioGroup>
 
       <div className="px-1.5 py-1">
         <Popover>
@@ -607,6 +686,7 @@ function DateSubContent({
           <DropdownMenuItem
             onClick={() => {
               setRange(undefined);
+              setPreset(null);
               onChange(null);
             }}
           >
@@ -795,6 +875,7 @@ export function IssueDisplayControls({
   const creatorFilters = useViewStore((s) => s.creatorFilters);
   const projectFilters = useViewStore((s) => s.projectFilters);
   const includeNoProject = useViewStore((s) => s.includeNoProject);
+  const excludeProjectFilters = useViewStore((s) => s.excludeProjectFilters);
   const labelFilters = useViewStore((s) => s.labelFilters);
   const sortBy = useViewStore((s) => s.sortBy);
   const sortDirection = useViewStore((s) => s.sortDirection);
@@ -815,6 +896,7 @@ export function IssueDisplayControls({
     creatorFilters,
     projectFilters,
     includeNoProject,
+    excludeProjectFilters,
     labelFilters,
     dateFilter: showDateFilter ? dateFilter : null,
   });
@@ -847,13 +929,32 @@ export function IssueDisplayControls({
     labels: "card_labels",
     childProgress: "card_child_progress",
   };
-  const dateFilterLabel = showDateFilter && dateFilter
-    ? `${t(($) => $.filters[DATE_FIELD_LABEL_KEY[dateFilter.field]])}: ${
-        dateFilter.from === dateFilter.to
-          ? shortDateLabel(dateFilter.from)
-          : `${shortDateLabel(dateFilter.from)} - ${shortDateLabel(dateFilter.to)}`
-      }`
-    : null;
+  const dateFilterLabel =
+    showDateFilter && dateFilter
+      ? (() => {
+          const fieldLabel = t(($) => $.filters[DATE_FIELD_LABEL_KEY[dateFilter.field]]);
+          if (dateFilter.preset === "today") {
+            return `${fieldLabel}: ${t(($) => $.filters.date_today)}`;
+          }
+          if (dateFilter.preset === "last_days") {
+            const days = dateFilter.days ?? 3;
+            if (days === 3) {
+              return `${fieldLabel}: ${t(($) => $.filters.date_last_3_days)}`;
+            }
+            if (days === 7) {
+              return `${fieldLabel}: ${t(($) => $.filters.date_last_7_days)}`;
+            }
+            return `${fieldLabel}: ${t(($) => $.filters.date_last_days, { count: days })}`;
+          }
+          const resolved = resolveIssueDateFilterRange(dateFilter);
+          if (!resolved) return null;
+          return `${fieldLabel}: ${
+            resolved.from === resolved.to
+              ? shortDateLabel(resolved.from)
+              : `${shortDateLabel(resolved.from)} - ${shortDateLabel(resolved.to)}`
+          }`;
+        })()
+      : null;
   const sortLabel = t(($) => $.display[SORT_LABEL_KEY[sortBy]]);
   const groupingLabel = t(($) => $.display[GROUPING_LABEL_KEY[grouping]]);
   const swimlaneGroupingLabel = t(($) => $.display[SWIMLANE_GROUPING_LABEL_KEY[swimlaneGrouping]]);
@@ -1052,9 +1153,9 @@ export function IssueDisplayControls({
               <DropdownMenuSubTrigger>
                 <FolderKanban className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_project)}</span>
-                {(projectFilters.length > 0 || includeNoProject) && (
+                {(projectFilters.length > 0 || includeNoProject || excludeProjectFilters.length > 0) && (
                   <span className="text-xs text-primary font-medium">
-                    {projectFilters.length + (includeNoProject ? 1 : 0)}
+                    {projectFilters.length + (includeNoProject ? 1 : 0) + excludeProjectFilters.length}
                   </span>
                 )}
               </DropdownMenuSubTrigger>
@@ -1062,7 +1163,9 @@ export function IssueDisplayControls({
                 <ProjectSubContent
                   counts={counts.project}
                   selected={projectFilters}
+                  excluded={excludeProjectFilters}
                   onToggle={act.toggleProjectFilter}
+                  onToggleExclude={act.toggleExcludeProjectFilter}
                   includeNoProject={includeNoProject}
                   onToggleNoProject={act.toggleNoProject}
                   noProjectCount={counts.noProject}

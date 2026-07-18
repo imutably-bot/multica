@@ -1,3 +1,5 @@
+import type { IssueDateFilter, IssueDateField, IssueDatePreset } from "./stores/view-store";
+
 // Issue start_date / due_date are calendar days, not instants: the pickers
 // offer no time-of-day input, so "Mar 1" must mean Mar 1 for every viewer
 // regardless of timezone. They are transported as a date-only "YYYY-MM-DD"
@@ -94,4 +96,44 @@ export function isPastDateOnly(value: string | null | undefined): boolean {
   if (!d) return false;
   const today = dateOnlyToUTCDate(todayDateOnly());
   return today != null && d.getTime() < today.getTime();
+}
+
+export function createRelativeIssueDateFilter(
+  field: IssueDateField,
+  preset: IssueDatePreset,
+  days?: number,
+): IssueDateFilter {
+  if (preset === "today") {
+    const today = todayDateOnly();
+    return { field, from: today, to: today, preset };
+  }
+
+  const lookbackDays = days && days > 0 ? days : 3;
+  return {
+    field,
+    from: addDaysDateOnly(1 - lookbackDays),
+    to: todayDateOnly(),
+    preset,
+    days: lookbackDays,
+  };
+}
+
+export function resolveIssueDateFilterRange(
+  filter: IssueDateFilter | null,
+): { field: IssueDateField; from: string; to: string } | null {
+  if (!filter) return null;
+  if (filter.preset === "today") {
+    const today = todayDateOnly();
+    return { field: filter.field, from: today, to: today };
+  }
+  if (filter.preset === "last_days") {
+    const lookbackDays = filter.days && filter.days > 0 ? filter.days : 3;
+    return {
+      field: filter.field,
+      from: addDaysDateOnly(1 - lookbackDays),
+      to: todayDateOnly(),
+    };
+  }
+
+  return { field: filter.field, from: filter.from, to: filter.to };
 }

@@ -33,6 +33,7 @@ import {
   type MoveIssueUpdates,
 } from "./use-issue-surface-actions";
 import { useIssueSurfaceData } from "./use-issue-surface-data";
+import { resolveIssueDateFilterRange } from "@multica/core/issues/date";
 
 interface UseIssueSurfaceControllerInput {
   scope: IssueScope;
@@ -80,10 +81,11 @@ export interface IssueSurfaceController {
 }
 
 function issueDateFilterToApiParams(filter: IssueDateFilter | null) {
-  if (!filter) return {};
+  const resolved = resolveIssueDateFilterRange(filter);
+  if (!resolved) return {};
 
-  const from = dateOnlyToLocalDate(filter.from);
-  const to = dateOnlyToLocalDate(filter.to);
+  const from = dateOnlyToLocalDate(resolved.from);
+  const to = dateOnlyToLocalDate(resolved.to);
   if (!from || !to) return {};
 
   const start = from <= to ? from : to;
@@ -92,7 +94,7 @@ function issueDateFilterToApiParams(filter: IssueDateFilter | null) {
   end.setDate(end.getDate() + 1);
 
   return {
-    date_field: filter.field,
+    date_field: resolved.field,
     date_start: start.toISOString(),
     date_end: end.toISOString(),
   };
@@ -124,6 +126,7 @@ export function useIssueSurfaceController({
   const creatorFilters = useViewStore((s) => s.creatorFilters);
   const projectFilters = useViewStore((s) => s.projectFilters);
   const includeNoProject = useViewStore((s) => s.includeNoProject);
+  const excludeProjectFilters = useViewStore((s) => s.excludeProjectFilters);
   const labelFilters = useViewStore((s) => s.labelFilters);
   const agentRunningFilter = useViewStore((s) => s.agentRunningFilter);
   const showSubIssues = useViewStore((s) => s.showSubIssues);
@@ -173,11 +176,15 @@ export function useIssueSurfaceController({
     () => ({
       projectFilters: scope.type === "project" ? [] : projectFilters,
       includeNoProject: scope.type === "project" ? false : includeNoProject,
+      excludeProjectFilters: scope.type === "project" ? [] : excludeProjectFilters,
     }),
-    [includeNoProject, projectFilters, scope.type],
+    [excludeProjectFilters, includeNoProject, projectFilters, scope.type],
   );
-  const { projectFilters: viewProjectFilters, includeNoProject: viewIncludeNoProject } =
-    projectFilterState;
+  const {
+    projectFilters: viewProjectFilters,
+    includeNoProject: viewIncludeNoProject,
+    excludeProjectFilters: viewExcludeProjectFilters,
+  } = projectFilterState;
 
   const data = useIssueSurfaceData({
     wsId,
@@ -193,6 +200,7 @@ export function useIssueSurfaceController({
     creatorFilters,
     projectFilters: viewProjectFilters,
     includeNoProject: viewIncludeNoProject,
+    excludeProjectFilters: viewExcludeProjectFilters,
     labelFilters,
     agentRunningFilter,
     showSubIssues,

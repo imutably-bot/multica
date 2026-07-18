@@ -16,6 +16,12 @@ import { Text } from "@/components/ui/text";
 import { StatusIcon } from "@/components/ui/status-icon";
 import { PriorityIcon } from "@/components/ui/priority-icon";
 import { useIssuesViewStore } from "@/data/stores/issues-view-store";
+import {
+  createDefaultIssueDateFilter,
+  type IssueDateField,
+  type IssueDateFilter,
+  createMobileRelativeIssueDateFilter,
+} from "@/data/stores/issue-date-filter";
 import { useMyIssuesViewStore } from "@/data/stores/my-issues-view-store";
 import { BOARD_STATUSES, STATUS_LABEL } from "@/lib/issue-status";
 import { cn } from "@/lib/utils";
@@ -72,7 +78,49 @@ export default function IssuesFilterRoute() {
     }
   };
 
-  const hasActive = statusFilters.length > 0 || priorityFilters.length > 0;
+  const currentDateFilter = dateFilter ?? createDefaultIssueDateFilter();
+  const hasActive =
+    statusFilters.length > 0 || priorityFilters.length > 0 || !!dateFilter;
+
+  const isPresetActive = (preset: "today" | "last_days", days?: number) =>
+    !!dateFilter &&
+    dateFilter.preset === preset &&
+    (preset === "today" || (dateFilter.days ?? 3) === (days ?? 3));
+
+  const onChangeDateField = (field: IssueDateField) => {
+    if (currentDateFilter.preset) {
+      setDateFilter(
+        createMobileRelativeIssueDateFilter(
+          field,
+          currentDateFilter.preset,
+          currentDateFilter.days,
+        ),
+      );
+      return;
+    }
+    setDateFilter({ ...currentDateFilter, field });
+  };
+  const applyPreset = (preset: "today" | "last_days", days?: number) => {
+    setDateFilter(createMobileRelativeIssueDateFilter(currentDateFilter.field, preset, days));
+  };
+  const onChangeDateFrom = (selected: Date | undefined) => {
+    if (!selected) return;
+    const next = normalizeDateFilter({
+      field: currentDateFilter.field,
+      from: toDateOnly(selected),
+      to: currentDateFilter.to,
+    });
+    setDateFilter(next);
+  };
+  const onChangeDateTo = (selected: Date | undefined) => {
+    if (!selected) return;
+    const next = normalizeDateFilter({
+      field: currentDateFilter.field,
+      from: currentDateFilter.from,
+      to: toDateOnly(selected),
+    });
+    setDateFilter(next);
+  };
 
   return (
     <View className="flex-1">
@@ -89,6 +137,90 @@ export default function IssuesFilterRoute() {
         ) : null}
       </View>
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <SectionLabel>Date</SectionLabel>
+        <View className="gap-3 px-4 pb-4">
+          <View className="flex-row gap-2">
+            <Pressable
+              onPress={() => applyPreset("today")}
+              className={cn(
+                "flex-1 rounded-xl border border-border px-3 py-2.5",
+                isPresetActive("today") && "border-primary bg-primary/10",
+              )}
+            >
+              <Text className="text-center text-sm font-medium text-foreground">
+                Today
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => applyPreset("last_days", 3)}
+              className={cn(
+                "flex-1 rounded-xl border border-border px-3 py-2.5",
+                isPresetActive("last_days", 3) && "border-primary bg-primary/10",
+              )}
+            >
+              <Text className="text-center text-sm font-medium text-foreground">
+                Last 3 days
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => applyPreset("last_days", 7)}
+              className={cn(
+                "flex-1 rounded-xl border border-border px-3 py-2.5",
+                isPresetActive("last_days", 7) && "border-primary bg-primary/10",
+              )}
+            >
+              <Text className="text-center text-sm font-medium text-foreground">
+                Last 7 days
+              </Text>
+            </Pressable>
+          </View>
+
+          <RadioGroup
+            value={currentDateFilter.field}
+            onValueChange={(value) =>
+              onChangeDateField(value as IssueDateField)
+            }
+            className="gap-0 rounded-xl border border-border overflow-hidden"
+          >
+            {DATE_FIELD_OPTIONS.map((option, idx) => {
+              const isLast = idx === DATE_FIELD_OPTIONS.length - 1;
+              return (
+                <View key={option.value}>
+                  <Pressable
+                    onPress={() => onChangeDateField(option.value)}
+                    className="flex-row items-center gap-3 px-4 py-3.5 active:bg-secondary"
+                  >
+                    <RadioGroupItem value={option.value} />
+                    <Text className="flex-1 text-sm font-medium text-foreground">
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                  {!isLast ? <View className="h-px bg-border ml-11" /> : null}
+                </View>
+              );
+            })}
+          </RadioGroup>
+
+          <DateRangeCard
+            label="From"
+            value={currentDateFilter.from}
+            onChange={onChangeDateFrom}
+            maximumDate={dateOnlyToLocalDate(currentDateFilter.to)}
+          />
+          <DateRangeCard
+            label="To"
+            value={currentDateFilter.to}
+            onChange={onChangeDateTo}
+            minimumDate={dateOnlyToLocalDate(currentDateFilter.from)}
+          />
+
+          {!dateFilter ? (
+            <Text className="px-1 text-xs text-muted-foreground">
+              Adjust a date to activate the filter.
+            </Text>
+          ) : null}
+        </View>
+
         <SectionLabel>Status</SectionLabel>
         {ALL_STATUSES.map((status) => {
           const checked = statusFilters.includes(status);

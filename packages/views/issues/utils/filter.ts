@@ -10,6 +10,7 @@ export interface IssueFilters {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   // When `agentRunningFilter` is true, only keep issues whose id is in
   // `runningIssueIds`. The set is derived by the caller from
@@ -32,6 +33,7 @@ export interface IssueFilterState {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   workingOnly: boolean;
   /** See IssueFilters.showSubIssues — only an explicit `false` hides. */
@@ -64,7 +66,18 @@ export function applyIssueFilters(
   filters: IssueFilterState,
   context: IssueFilterContext = {},
 ): Issue[] {
-  const { statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters, includeNoProject, labelFilters, workingOnly } = filters;
+  const {
+    statusFilters,
+    priorityFilters,
+    assigneeFilters,
+    includeNoAssignee,
+    creatorFilters,
+    projectFilters,
+    includeNoProject,
+    excludeProjectFilters,
+    labelFilters,
+    workingOnly,
+  } = filters;
   const hasAssigneeFilter = assigneeFilters.length > 0 || includeNoAssignee;
   const hasProjectFilter = projectFilters.length > 0 || includeNoProject;
   // Empty set passed without `agentRunningFilter` is a no-op. When the
@@ -109,15 +122,16 @@ export function applyIssueFilters(
       return false;
     }
 
-    if (hasProjectFilter) {
-      if (!issue.project_id) {
-        if (!includeNoProject) return false;
-      } else if (projectFilters.length > 0) {
-        if (!projectFilters.includes(issue.project_id)) return false;
-      } else {
-        // Only "No project" is checked → hide issues that have a project
+    if (issue.project_id) {
+      if (excludeProjectFilters.includes(issue.project_id)) return false;
+      if (projectFilters.length > 0 && !projectFilters.includes(issue.project_id)) {
         return false;
       }
+      if (projectFilters.length === 0 && includeNoProject) {
+        return false;
+      }
+    } else if (hasProjectFilter && !includeNoProject) {
+      return false;
     }
 
     if (labelFilters.length > 0) {
@@ -143,6 +157,7 @@ export function filterIssues(issues: Issue[], filters: IssueFilters): Issue[] {
       creatorFilters: filters.creatorFilters,
       projectFilters: filters.projectFilters,
       includeNoProject: filters.includeNoProject,
+      excludeProjectFilters: filters.excludeProjectFilters,
       labelFilters: filters.labelFilters,
       workingOnly: filters.agentRunningFilter === true,
       showSubIssues: filters.showSubIssues,

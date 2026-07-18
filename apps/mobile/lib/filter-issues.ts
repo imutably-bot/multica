@@ -7,7 +7,25 @@
  * Mobile only filters on status + priority for now; assignee / project /
  * label slots from the web filter are deferred to v2.
  */
+import { dateOnlyToUTCDate, resolveIssueDateFilterRange } from "@multica/core/issues/date";
 import type { Issue, IssuePriority, IssueStatus } from "@multica/core/types";
+import type { IssueDateFilter } from "@/data/stores/issue-date-filter";
+
+function issueMatchesDateFilter(
+  issue: Issue,
+  filter: IssueDateFilter,
+): boolean {
+  const resolved = resolveIssueDateFilterRange(filter);
+  if (!resolved) return false;
+  const issueDate = dateOnlyToUTCDate(issue[resolved.field]);
+  const from = dateOnlyToUTCDate(resolved.from);
+  const to = dateOnlyToUTCDate(resolved.to);
+  if (!issueDate || !from || !to) return false;
+  const lower = from.getTime() <= to.getTime() ? from : to;
+  const upper = from.getTime() <= to.getTime() ? to : from;
+  const time = issueDate.getTime();
+  return time >= lower.getTime() && time <= upper.getTime();
+}
 
 export function filterIssues(
   issues: Issue[],
