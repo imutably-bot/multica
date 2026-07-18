@@ -991,6 +991,24 @@ func TestSearchAgentsWildcard(t *testing.T) {
 	if len(resp2.Agents) != 1 || resp2.Agents[0].ID != agent1 {
 		t.Errorf("wildcard match with ? failed, expected agent %s, got %d agents", agent1, len(resp2.Agents))
 	}
+
+	// Query with open-ended wildcard search (e.g. *agent-on should match wild-agent-one)
+	w3 := httptest.NewRecorder()
+	req3 := newRequest(http.MethodGet, "/api/agents/search?q=*agent-on", nil)
+	testHandler.SearchAgents(w3, req3)
+	if w3.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w3.Code)
+	}
+
+	var resp3 struct {
+		Agents []AgentResponse `json:"agents"`
+	}
+	if err := json.NewDecoder(w3.Body).Decode(&resp3); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp3.Agents) != 1 || resp3.Agents[0].ID != agent1 {
+		t.Errorf("open-ended wildcard match failed, expected agent %s, got %d agents", agent1, len(resp3.Agents))
+	}
 }
 
 // Defence-in-depth: spot-check that the package compiles a small

@@ -802,6 +802,11 @@ func escapeLikeWithWildcards(s string) string {
 	s = strings.ReplaceAll(s, `_`, `\_`)
 	s = strings.ReplaceAll(s, `*`, `%`)
 	s = strings.ReplaceAll(s, `?`, `_`)
+	// If the query contains wildcards but doesn't end with a wildcard, append %
+	// so it behaves as an open-ended match.
+	if (strings.Contains(s, "%") || strings.Contains(s, "_")) && !strings.HasSuffix(s, "%") && !strings.HasSuffix(s, "_") {
+		s = s + "%"
+	}
 	return s
 }
 
