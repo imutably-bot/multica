@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Member } from "@multica/core/types";
+import type { MemberWithUser } from "@multica/core/types";
 import {
   projectMembersOptions,
   useAddProjectMember,
@@ -26,7 +26,7 @@ export function ProjectMembersSection({
   canManage,
 }: {
   projectId: string;
-  members: Member[];
+  members: MemberWithUser[];
   canManage: boolean;
 }) {
   const { t } = useT("projects");
