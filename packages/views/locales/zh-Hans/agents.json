@@ -70,7 +70,8 @@
     "last_active": "最近活跃",
     "model": "模型",
     "created": "创建时间",
-    "owner": "Owner"
+    "owner": "Owner",
+    "projects": "项目"
   },
   "row": {
     "you": "你",

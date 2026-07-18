@@ -62,7 +62,8 @@
     "last_active": "最終アクティブ",
     "model": "モデル",
     "created": "作成日時",
-    "owner": "オーナー"
+    "owner": "オーナー",
+    "projects": "プロジェクト"
   },
   "row": {
     "you": "あなた",

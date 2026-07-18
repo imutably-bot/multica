@@ -78,6 +78,33 @@ func TestProjectAgentsEndToEnd(t *testing.T) {
 		}
 	}
 
+	// 5.5 Test ListAgentProjects
+	{
+		w := httptest.NewRecorder()
+		req := newRequest("GET", "/api/agents/"+agent1ID+"/projects?workspace_id="+testWorkspaceID, nil)
+		req = withURLParam(req, "id", agent1ID)
+		testHandler.ListAgentProjects(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 for ListAgentProjects, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var resp struct {
+			Projects []ProjectResponse `json:"projects"`
+			Total    int               `json:"total"`
+		}
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode ListAgentProjects: %v", err)
+		}
+
+		if resp.Total != 1 {
+			t.Errorf("expected 1 project for agent-1, got %d", resp.Total)
+		}
+		if resp.Projects[0].ID != project.ID {
+			t.Errorf("expected project ID %s, got %s", project.ID, resp.Projects[0].ID)
+		}
+	}
+
 	// 6. Set (sync/overwrite) agents in project (overwrite with only agent-2)
 	{
 		w := httptest.NewRecorder()

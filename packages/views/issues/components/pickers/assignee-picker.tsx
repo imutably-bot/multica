@@ -231,7 +231,7 @@ export function AssigneePicker({
       )}
 
       {/* Other Workspace Agents */}
-      {projectId && filteredOtherAgents.length > 0 && (
+      {projectId && query && filteredOtherAgents.length > 0 && (
         <PickerSection label="Other Workspace Agents">
           {filteredOtherAgents.map((a) => renderAgentItem(a))}
         </PickerSection>

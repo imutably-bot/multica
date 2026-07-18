@@ -70,7 +70,8 @@
     "last_active": "최근 활동",
     "model": "모델",
     "created": "생성일",
-    "owner": "소유자"
+    "owner": "소유자",
+    "projects": "프로젝트"
   },
   "row": {
     "you": "나",

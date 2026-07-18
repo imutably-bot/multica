@@ -29,5 +29,6 @@ export {
   useSetProjectAgents,
   useAddProjectAgent,
   useRemoveProjectAgent,
+  agentProjectsOptions,
 } from "./agents";
 export { projectAgentListOptions } from "../workspace/queries";

@@ -850,6 +850,10 @@ export class ApiClient {
     return this.fetch(`/api/agents?${search}`);
   }
 
+  async listAgentProjects(agentId: string): Promise<{ projects: Project[]; total: number }> {
+    return this.fetch(`/api/agents/${agentId}/projects`);
+  }
+
   async setProjectAgents(projectId: string, agentIds: string[]): Promise<void> {
     await this.fetch(`/api/projects/${projectId}/agents`, {
       method: "PUT",

@@ -71,7 +71,8 @@
     "last_active": "Last active",
     "model": "Model",
     "created": "Created",
-    "owner": "Owner"
+    "owner": "Owner",
+    "projects": "Projects"
   },
   "row": {
     "you": "You",
