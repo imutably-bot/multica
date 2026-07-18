@@ -1,8 +1,8 @@
 /**
  * Workspace-wide Issues page. Mirrors web `packages/views/issues/components/
  * issues-page.tsx:32-94`: fetch every issue in the workspace, expose
- * `all / members / agents` scope tabs, group by status, allow status +
- * priority filtering.
+ * `all / members / agents` scope tabs, group by status, and allow
+ * status / priority / date filtering.
  *
  * Scope is a **client-side** filter on `assignee_type` — matches web
  * `issues-page.tsx:90-94`. This keeps `issueListOptions(wsId)` workspace-
@@ -16,9 +16,9 @@
  *   - Independent filter store (`useIssuesViewStore`) so workspace-level
  *     filters don't bleed into the per-user view.
  *
- * Filters beyond status/priority (assignee / project / label / creator)
- * are deferred — power-user features with non-trivial picker cost; ship
- * after the parity-critical scope tabs land.
+ * Filters beyond status/priority/date (assignee / project / label /
+ * creator) are deferred — power-user features with non-trivial picker
+ * cost; ship after the parity-critical scope tabs land.
  */
 import { useMemo } from "react";
 import { Pressable, SectionList, View } from "react-native";
@@ -41,6 +41,7 @@ import {
   useIssuesViewStore,
   type IssuesScope,
 } from "@/data/stores/issues-view-store";
+import { formatIssueDateFilterLabel } from "@/data/stores/issue-date-filter";
 import { useClearFiltersOnWorkspaceChange } from "@/lib/use-clear-filters-on-workspace-change";
 import {
   BOARD_STATUSES,
@@ -72,6 +73,7 @@ export default function IssuesPage() {
   const setScope = useIssuesViewStore((s) => s.setScope);
   const statusFilters = useIssuesViewStore((s) => s.statusFilters);
   const priorityFilters = useIssuesViewStore((s) => s.priorityFilters);
+  const dateFilter = useIssuesViewStore((s) => s.dateFilter);
 
   const openFilter = () => {
     if (!wsSlug) return;
@@ -93,7 +95,8 @@ export default function IssuesPage() {
   const allIssues = data ?? [];
 
   // Scope pre-filter — mirrors web `issues-page.tsx:90-94`. Applied before
-  // status/priority filtering so chip filters operate on the visible slice.
+  // status / priority / date filtering so chip filters operate on the
+  // visible slice.
   const scopedIssues = useMemo(() => {
     if (scope === "members") {
       return allIssues.filter((i) => i.assignee_type === "member");
@@ -107,8 +110,8 @@ export default function IssuesPage() {
   }, [allIssues, scope]);
 
   const filtered = useMemo(
-    () => filterIssues(scopedIssues, statusFilters, priorityFilters),
-    [scopedIssues, statusFilters, priorityFilters],
+    () => filterIssues(scopedIssues, statusFilters, priorityFilters, dateFilter),
+    [scopedIssues, statusFilters, priorityFilters, dateFilter],
   );
 
   // Section grouping uses BOARD_STATUSES (cancelled excluded) — matches web
@@ -131,7 +134,7 @@ export default function IssuesPage() {
   }, [filtered, statusFilters]);
 
   const hasActiveFilters =
-    statusFilters.length > 0 || priorityFilters.length > 0;
+    statusFilters.length > 0 || priorityFilters.length > 0 || !!dateFilter;
 
   const showEmptyState = !isLoading && !error && filtered.length === 0;
 
@@ -148,12 +151,14 @@ export default function IssuesPage() {
         <ActiveFilterChips
           statusFilters={statusFilters}
           priorityFilters={priorityFilters}
+          dateFilter={dateFilter}
           onClearStatus={(s) =>
             useIssuesViewStore.getState().toggleStatusFilter(s)
           }
           onClearPriority={(p) =>
             useIssuesViewStore.getState().togglePriorityFilter(p)
           }
+          onClearDate={() => useIssuesViewStore.getState().setDateFilter(null)}
         />
       ) : null}
       {isLoading ? (
@@ -298,13 +303,17 @@ function ScopeToolbar<S extends string>({
 function ActiveFilterChips({
   statusFilters,
   priorityFilters,
+  dateFilter,
   onClearStatus,
   onClearPriority,
+  onClearDate,
 }: {
   statusFilters: IssueStatus[];
   priorityFilters: IssuePriority[];
+  dateFilter: { field: "created_at" | "updated_at"; from: string; to: string } | null;
   onClearStatus: (s: IssueStatus) => void;
   onClearPriority: (p: IssuePriority) => void;
+  onClearDate: () => void;
 }) {
   return (
     <View className="flex-row flex-wrap gap-1.5 px-4 pb-2">
@@ -322,6 +331,13 @@ function ActiveFilterChips({
           onClear={() => onClearPriority(p)}
         />
       ))}
+      {dateFilter ? (
+        <Chip
+          key={`d-${dateFilter.field}-${dateFilter.from}-${dateFilter.to}`}
+          label={formatIssueDateFilterLabel(dateFilter)}
+          onClear={onClearDate}
+        />
+      ) : null}
     </View>
   );
 }
