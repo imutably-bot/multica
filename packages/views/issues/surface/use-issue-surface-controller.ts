@@ -124,6 +124,7 @@ export function useIssueSurfaceController({
   const creatorFilters = useViewStore((s) => s.creatorFilters);
   const projectFilters = useViewStore((s) => s.projectFilters);
   const includeNoProject = useViewStore((s) => s.includeNoProject);
+  const excludeProjectFilters = useViewStore((s) => s.excludeProjectFilters);
   const labelFilters = useViewStore((s) => s.labelFilters);
   const agentRunningFilter = useViewStore((s) => s.agentRunningFilter);
   const showSubIssues = useViewStore((s) => s.showSubIssues);
@@ -193,6 +194,7 @@ export function useIssueSurfaceController({
     creatorFilters,
     projectFilters: viewProjectFilters,
     includeNoProject: viewIncludeNoProject,
+    excludeProjectFilters,
     labelFilters,
     agentRunningFilter,
     showSubIssues,

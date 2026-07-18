@@ -163,6 +163,7 @@ const mockViewState: {
   creatorFilters?: any[];
   projectFilters?: string[];
   includeNoProject?: boolean;
+  excludeProjectFilters?: string[];
   labelFilters?: string[];
   agentRunningFilter?: boolean;
 } = {
@@ -183,6 +184,7 @@ const mockViewState: {
   creatorFilters: [],
   projectFilters: [],
   includeNoProject: false,
+  excludeProjectFilters: [],
   labelFilters: [],
   agentRunningFilter: false,
 };
@@ -1513,6 +1515,7 @@ describe("SwimLaneView", () => {
           creatorFilters: [],
           projectFilters: [],
           includeNoProject: false,
+          excludeProjectFilters: [],
           labelFilters: [],
           agentRunningFilter: false,
         }}
@@ -1609,6 +1612,7 @@ describe("SwimLaneView", () => {
           creatorFilters: [],
           projectFilters: [],
           includeNoProject: false,
+          excludeProjectFilters: [],
           labelFilters: [],
           agentRunningFilter: true,
         }}
@@ -1691,6 +1695,7 @@ describe("SwimLaneView", () => {
           creatorFilters: [],
           projectFilters: [],
           includeNoProject: false,
+          excludeProjectFilters: [],
           labelFilters: [],
           agentRunningFilter: false,
           showSubIssues: false,
