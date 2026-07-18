@@ -42,7 +42,7 @@ function sortViews(views: SavedIssueView[]): SavedIssueView[] {
 
 export const useIssueSavedViewsStore = create<SavedIssueViewStore>()(
   persist(
-    (set, get) => ({
+    (set, _get) => ({
       views: [],
       saveView: (name, state, scope, id) => {
         const timestamp = nowIso();
