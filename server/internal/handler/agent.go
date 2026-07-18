@@ -602,7 +602,25 @@ func (h *Handler) ListAgents(w http.ResponseWriter, r *http.Request) {
 
 	var agents []db.Agent
 	var err error
-	if q != "" {
+
+	projectID := r.URL.Query().Get("project_id")
+	if projectID != "" {
+		projUUID, ok := parseUUIDOrBadRequest(w, projectID, "project id")
+		if !ok {
+			return
+		}
+		agents, err = h.Queries.ListAgentsInProject(r.Context(), projUUID)
+		if q != "" && err == nil {
+			var filtered []db.Agent
+			lowerQ := strings.ToLower(q)
+			for _, a := range agents {
+				if strings.Contains(strings.ToLower(a.Name), lowerQ) {
+					filtered = append(filtered, a)
+				}
+			}
+			agents = filtered
+		}
+	} else if q != "" {
 		var pattern string
 		if !strings.Contains(q, "*") && !strings.Contains(q, "?") {
 			pattern = "%" + escapeLikeWithWildcards(q) + "%"
