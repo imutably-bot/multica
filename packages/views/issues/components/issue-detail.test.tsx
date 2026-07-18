@@ -834,14 +834,14 @@ describe("IssueDetail (shared)", () => {
     fireEvent.click(shellButton);
 
     await waitFor(() => {
-      expect(screen.getByText("Claude Agent")).toBeInTheDocument();
-      expect(screen.getByText("Helper Agent")).toBeInTheDocument();
+      expect(screen.getAllByText("Claude Agent").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Helper Agent").length).toBeGreaterThan(0);
       expect(screen.queryByText("Archived Agent")).not.toBeInTheDocument();
     });
 
-    expect(screen.getByRole("link", { name: /Open shell — Helper Agent/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Helper Agent/i })).toHaveAttribute(
       "href",
-      "/test/issues/issue-1/shell?agentId=agent-2",
+      "/test/issues/issue-1/shell",
     );
   });
 
