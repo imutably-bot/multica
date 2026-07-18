@@ -15,8 +15,14 @@ export function matchesWildcard(name: string, query: string): boolean {
   let escaped = q.replace(/[\\^$.|[\]()+]/g, "\\$&");
   // Map * to .* and ? to .
   let regexStr = escaped.replace(/\*/g, ".*").replace(/\?/g, ".");
+
+  // If the query has wildcards but doesn't end with one, make it open-ended by not anchoring the end with $
+  const hasWildcard = q.includes("*") || q.includes("?");
+  const endsWithWildcard = q.endsWith("*") || q.endsWith("?");
+  const anchorEnd = hasWildcard && !endsWithWildcard ? "" : "$";
+
   try {
-    const regex = new RegExp(`^${regexStr}$`, "i");
+    const regex = new RegExp(`^${regexStr}${anchorEnd}`, "i");
     return regex.test(name);
   } catch (e) {
     return name.toLowerCase().includes(q);

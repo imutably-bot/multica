@@ -66,5 +66,13 @@ describe("matchesPinyin", () => {
       expect(matchesPinyin("wild-agent-one", "wild-agent-o??")).toBe(true);
       expect(matchesPinyin("wild-agent-one", "wild-agent-?")).toBe(false);
     });
+
+    it("matches open-ended queries (e.g. *clau for autocomplete suggestions)", () => {
+      expect(matchesPinyin("trondethi-hptom-claude", "*clau")).toBe(true);
+      expect(matchesPinyin("trondethi-hptom-claude", "*claude")).toBe(true);
+      expect(matchesPinyin("trondethi-hptom-claude", "trondethi-hptom-claud?")).toBe(true);
+      expect(matchesPinyin("trondethi-hptom-claude", "trondethi-hptom-clau?")).toBe(false);
+      expect(matchesPinyin("trondethi-hptom-claude", "*claudes")).toBe(false);
+    });
   });
 });
