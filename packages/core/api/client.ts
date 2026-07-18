@@ -81,6 +81,8 @@ import type {
   CreateProjectResourceRequest,
   UpdateProjectResourceRequest,
   ListProjectResourcesResponse,
+  AddProjectMemberRequest,
+  ListProjectMembersResponse,
   Label,
   CreateLabelRequest,
   UpdateLabelRequest,
@@ -171,6 +173,7 @@ import {
   EMPTY_LIST_ISSUES_RESPONSE,
   EMPTY_SEARCH_ISSUES_RESPONSE,
   EMPTY_SEARCH_PROJECTS_RESPONSE,
+  EMPTY_PROJECT_MEMBERS_RESPONSE,
   EMPTY_SQUAD,
   EMPTY_SQUAD_LIST,
   EMPTY_SQUAD_MEMBER_STATUS_LIST,
@@ -191,6 +194,7 @@ import {
   RuntimeUsageListSchema,
   SearchIssuesResponseSchema,
   SearchProjectsResponseSchema,
+  ProjectMembersResponseSchema,
   SquadSchema,
   SquadListSchema,
   SquadMemberStatusListResponseSchema,
@@ -1922,6 +1926,35 @@ export class ApiClient {
 
   async deleteProject(id: string): Promise<void> {
     await this.fetch(`/api/projects/${id}`, { method: "DELETE" });
+  }
+
+  async listProjectMembers(projectId: string): Promise<ListProjectMembersResponse> {
+    const raw = await this.fetch<unknown>(`/api/projects/${projectId}/members`);
+    return parseWithFallback(raw, ProjectMembersResponseSchema, EMPTY_PROJECT_MEMBERS_RESPONSE, {
+      endpoint: `GET /api/projects/${projectId}/members`,
+    });
+  }
+
+  async addProjectMember(
+    projectId: string,
+    data: AddProjectMemberRequest,
+  ): Promise<ListProjectMembersResponse> {
+    const raw = await this.fetch<unknown>(`/api/projects/${projectId}/members`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return parseWithFallback(raw, ProjectMembersResponseSchema, EMPTY_PROJECT_MEMBERS_RESPONSE, {
+      endpoint: `POST /api/projects/${projectId}/members`,
+    });
+  }
+
+  async removeProjectMember(projectId: string, userId: string): Promise<ListProjectMembersResponse> {
+    const raw = await this.fetch<unknown>(`/api/projects/${projectId}/members/${userId}`, {
+      method: "DELETE",
+    });
+    return parseWithFallback(raw, ProjectMembersResponseSchema, EMPTY_PROJECT_MEMBERS_RESPONSE, {
+      endpoint: `DELETE /api/projects/${projectId}/members/${userId}`,
+    });
   }
 
   // Project resources

@@ -93,6 +93,28 @@ func TestUpdateProjectInvalidStatusReturns400(t *testing.T) {
 	}
 }
 
+func TestUpdateProjectRequiresAdminOrOwner(t *testing.T) {
+	memberUserID := createProjectPermissionTestMember(t, "member")
+	adminUserID := createProjectPermissionTestMember(t, "admin")
+	project := createProjectPermissionTestProject(t, "update permission project")
+
+	w := httptest.NewRecorder()
+	req := newRequestAs(memberUserID, "PUT", "/api/projects/"+project.ID, map[string]any{"title": "member edit"})
+	req = withURLParam(req, "id", project.ID)
+	testHandler.UpdateProject(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for plain member project update, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(adminUserID, "PUT", "/api/projects/"+project.ID, map[string]any{"title": "admin edit"})
+	req = withURLParam(req, "id", project.ID)
+	testHandler.UpdateProject(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for admin project update, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestDeleteProjectRequiresAdminOrOwner(t *testing.T) {
 	memberUserID := createProjectPermissionTestMember(t, "member")
 	project := createProjectPermissionTestProject(t, "delete permission denied project")
@@ -134,6 +156,158 @@ func TestDeleteProjectAllowsAdmin(t *testing.T) {
 	}
 	if exists {
 		t.Fatal("project still exists after admin delete")
+	}
+}
+
+func TestProjectResourceMutationsRequireAdminOrOwner(t *testing.T) {
+	memberUserID := createProjectPermissionTestMember(t, "member")
+	adminUserID := createProjectPermissionTestMember(t, "admin")
+	project := createProjectPermissionTestProject(t, "resource permission project")
+
+	w := httptest.NewRecorder()
+	req := newRequestAs(memberUserID, "POST", "/api/projects/"+project.ID+"/resources", map[string]any{
+		"resource_type": "github_repo",
+		"resource_ref": map[string]any{
+			"url": "https://github.com/multica-ai/multica",
+		},
+	})
+	req = withURLParam(req, "id", project.ID)
+	testHandler.CreateProjectResource(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for plain member project resource create, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(adminUserID, "POST", "/api/projects/"+project.ID+"/resources", map[string]any{
+		"resource_type": "github_repo",
+		"resource_ref": map[string]any{
+			"url": "https://github.com/multica-ai/multica",
+		},
+	})
+	req = withURLParam(req, "id", project.ID)
+	testHandler.CreateProjectResource(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for admin project resource create, got %d: %s", w.Code, w.Body.String())
+	}
+	var resource ProjectResourceResponse
+	if err := json.NewDecoder(w.Body).Decode(&resource); err != nil {
+		t.Fatalf("decode CreateProjectResource: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM project_resource WHERE id = $1`, resource.ID)
+	})
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(memberUserID, "PUT", "/api/projects/"+project.ID+"/resources/"+resource.ID, map[string]any{
+		"label": "member edit",
+	})
+	req = withURLParams(req, "id", project.ID, "resourceId", resource.ID)
+	testHandler.UpdateProjectResource(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for plain member project resource update, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(adminUserID, "PUT", "/api/projects/"+project.ID+"/resources/"+resource.ID, map[string]any{
+		"label": "admin edit",
+	})
+	req = withURLParams(req, "id", project.ID, "resourceId", resource.ID)
+	testHandler.UpdateProjectResource(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for admin project resource update, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(memberUserID, "DELETE", "/api/projects/"+project.ID+"/resources/"+resource.ID, nil)
+	req = withURLParams(req, "id", project.ID, "resourceId", resource.ID)
+	testHandler.DeleteProjectResource(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for plain member project resource delete, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(adminUserID, "DELETE", "/api/projects/"+project.ID+"/resources/"+resource.ID, nil)
+	req = withURLParams(req, "id", project.ID, "resourceId", resource.ID)
+	testHandler.DeleteProjectResource(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 for admin project resource delete, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProjectMembersRequireAdminOrOwnerForMutations(t *testing.T) {
+	memberUserID := createProjectPermissionTestMember(t, "member")
+	adminUserID := createProjectPermissionTestMember(t, "admin")
+	project := createProjectPermissionTestProject(t, "member permission project")
+
+	w := httptest.NewRecorder()
+	req := newRequestAs(memberUserID, "GET", "/api/projects/"+project.ID+"/members", nil)
+	req = withURLParam(req, "id", project.ID)
+	testHandler.ListProjectMembers(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for project member list, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(memberUserID, "POST", "/api/projects/"+project.ID+"/members", map[string]any{
+		"user_id": adminUserID,
+	})
+	req = withURLParam(req, "id", project.ID)
+	testHandler.AddProjectMember(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for plain member project member add, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(adminUserID, "POST", "/api/projects/"+project.ID+"/members", map[string]any{
+		"user_id": memberUserID,
+	})
+	req = withURLParam(req, "id", project.ID)
+	testHandler.AddProjectMember(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for admin project member add, got %d: %s", w.Code, w.Body.String())
+	}
+	var addResp ProjectMembersResponse
+	if err := json.NewDecoder(w.Body).Decode(&addResp); err != nil {
+		t.Fatalf("decode add response: %v", err)
+	}
+	if addResp.Total != 1 || len(addResp.Members) != 1 {
+		t.Fatalf("expected 1 assigned member after add, got %+v", addResp)
+	}
+	if addResp.Members[0].UserID != memberUserID {
+		t.Fatalf("expected added member %q, got %q", memberUserID, addResp.Members[0].UserID)
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(adminUserID, "POST", "/api/projects/"+project.ID+"/members", map[string]any{
+		"user_id": memberUserID,
+	})
+	req = withURLParam(req, "id", project.ID)
+	testHandler.AddProjectMember(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for duplicate project member add, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(memberUserID, "DELETE", "/api/projects/"+project.ID+"/members/"+memberUserID, nil)
+	req = withURLParams(req, "id", project.ID, "userId", memberUserID)
+	testHandler.RemoveProjectMember(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for plain member project member delete, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequestAs(adminUserID, "DELETE", "/api/projects/"+project.ID+"/members/"+memberUserID, nil)
+	req = withURLParams(req, "id", project.ID, "userId", memberUserID)
+	testHandler.RemoveProjectMember(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for admin project member delete, got %d: %s", w.Code, w.Body.String())
+	}
+	var deleteResp ProjectMembersResponse
+	if err := json.NewDecoder(w.Body).Decode(&deleteResp); err != nil {
+		t.Fatalf("decode delete response: %v", err)
+	}
+	if deleteResp.Total != 0 || len(deleteResp.Members) != 0 {
+		t.Fatalf("expected empty project member list after delete, got %+v", deleteResp)
 	}
 }
 

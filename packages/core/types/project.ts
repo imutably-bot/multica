@@ -106,3 +106,18 @@ export interface ListProjectResourcesResponse {
   resources: ProjectResource[];
   total: number;
 }
+
+export interface ProjectMember {
+  user_id: string;
+  added_by: string;
+  created_at: string;
+}
+
+export interface AddProjectMemberRequest {
+  user_id: string;
+}
+
+export interface ListProjectMembersResponse {
+  members: ProjectMember[];
+  total: number;
+}
