@@ -301,7 +301,7 @@ function ShellAgentPicker({
                 className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-sm"
               >
                 <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="truncate">{agent.name}</span>
+                <span className="whitespace-normal break-all">{agent.name}</span>
                 {agent.id === assigneeId && (
                   <span className="ml-auto text-xs text-muted-foreground shrink-0">current</span>
                 )}
