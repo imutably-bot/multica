@@ -1,5 +1,11 @@
 export { projectKeys, projectListOptions, projectDetailOptions } from "./queries";
 export { useCreateProject, useUpdateProject, useDeleteProject } from "./mutations";
+export {
+  projectMemberKeys,
+  projectMembersOptions,
+  useAddProjectMember,
+  useRemoveProjectMember,
+} from "./members";
 export { useProjectDraftStore } from "./draft-store";
 export {
   useProjectViewStore,

@@ -417,10 +417,11 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "project not found")
 		return
 	}
-	userID, ok := requireUserID(w, r)
+	requester, ok := h.requireWorkspaceRole(w, r, uuidToString(prevProject.WorkspaceID), "project not found", "owner", "admin")
 	if !ok {
 		return
 	}
+	userID := uuidToString(requester.UserID)
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "failed to read request body")
@@ -523,6 +524,14 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := uuidToString(requester.UserID)
+	if h.DB == nil {
+		writeError(w, http.StatusInternalServerError, "database executor not configured")
+		return
+	}
+	if _, err := h.DB.Exec(r.Context(), `DELETE FROM project_member WHERE project_id = $1`, project.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete project members")
+		return
+	}
 	if err := h.Queries.DeleteProject(r.Context(), db.DeleteProjectParams{
 		ID:          project.ID,
 		WorkspaceID: project.WorkspaceID,

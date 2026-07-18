@@ -17,6 +17,7 @@ import type {
   GroupedIssuesResponse,
   InboxWorkspaceUnread,
   ListIssuesResponse,
+  ListProjectMembersResponse,
   ListWebhookDeliveriesResponse,
   SearchIssuesResponse,
   SearchProjectsResponse,
@@ -338,6 +339,22 @@ const SearchProjectResultSchema = ProjectSchema.extend({
   match_source: z.string(),
   matched_snippet: z.string().optional(),
 }).loose();
+
+const ProjectMemberSchema = z.object({
+  user_id: z.string(),
+  added_by: z.string(),
+  created_at: z.string(),
+}).loose();
+
+export const ProjectMembersResponseSchema = z.object({
+  members: z.array(ProjectMemberSchema).default([]),
+  total: z.number().default(0),
+}).loose();
+
+export const EMPTY_PROJECT_MEMBERS_RESPONSE: ListProjectMembersResponse = {
+  members: [],
+  total: 0,
+};
 
 export const SearchProjectsResponseSchema = z.object({
   projects: z.array(SearchProjectResultSchema).default([]),

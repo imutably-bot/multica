@@ -24,6 +24,7 @@ import { ActorAvatar } from "../../common/actor-avatar";
 import { useNavigation } from "../../navigation";
 import { TitleEditor, ContentEditor, type ContentEditorRef } from "../../editor";
 import { PriorityIcon } from "../../issues/components/priority-icon";
+import { ProjectMembersSection } from "./project-members-section";
 import { ProjectResourcesSection } from "./project-resources-section";
 import { IssueSurface } from "../../issues/surface/issue-surface";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
@@ -453,6 +454,8 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           </p>
         </div>}
       </div>
+
+      <ProjectMembersSection projectId={projectId} members={members} canManage={isWorkspaceAdmin} />
 
       {/* Resources */}
       <ProjectResourcesSection projectId={projectId} />
