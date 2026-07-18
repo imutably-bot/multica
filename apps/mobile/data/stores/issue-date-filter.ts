@@ -1,11 +1,19 @@
-import { formatDateOnly, todayDateOnly } from "@multica/core/issues/date";
+import {
+  createRelativeIssueDateFilter,
+  formatDateOnly,
+  resolveIssueDateFilterRange,
+  todayDateOnly,
+} from "@multica/core/issues/date";
 
 export type IssueDateField = "created_at" | "updated_at";
+export type IssueDatePreset = "today" | "last_days";
 
 export interface IssueDateFilter {
   field: IssueDateField;
   from: string;
   to: string;
+  preset?: IssueDatePreset;
+  days?: number;
 }
 
 export function createDefaultIssueDateFilter(
@@ -15,12 +23,30 @@ export function createDefaultIssueDateFilter(
   return { field, from: today, to: today };
 }
 
+export function createMobileRelativeIssueDateFilter(
+  field: IssueDateField,
+  preset: IssueDatePreset,
+  days?: number,
+): IssueDateFilter {
+  return createRelativeIssueDateFilter(field, preset, days);
+}
+
 export function formatIssueDateFilterLabel(filter: IssueDateFilter): string {
   const fieldLabel = filter.field === "created_at" ? "Created" : "Updated";
-  const from = formatDateOnly(filter.from);
-  const to = formatDateOnly(filter.to);
+  if (filter.preset === "today") {
+    return `${fieldLabel}: Today`;
+  }
+  if (filter.preset === "last_days") {
+    const days = filter.days && filter.days > 0 ? filter.days : 3;
+    return `${fieldLabel}: Last ${days} days`;
+  }
+
+  const resolved = resolveIssueDateFilterRange(filter);
+  if (!resolved) return fieldLabel;
+  const from = formatDateOnly(resolved.from);
+  const to = formatDateOnly(resolved.to);
   if (!from || !to) return fieldLabel;
-  return filter.from === filter.to
+  return resolved.from === resolved.to
     ? `${fieldLabel}: ${from}`
     : `${fieldLabel}: ${from} - ${to}`;
 }

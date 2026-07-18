@@ -15,6 +15,7 @@ const NO_FILTER: IssueFilters = {
   creatorFilters: [],
   projectFilters: [],
   includeNoProject: false,
+  excludeProjectFilters: [],
   labelFilters: [],
 };
 
@@ -160,6 +161,14 @@ describe("filterIssues", () => {
   it("hides project issues when only 'No project' is selected", () => {
     const result = filterIssues(issues, { ...NO_FILTER, includeNoProject: true });
     expect(result.every((i) => !i.project_id)).toBe(true);
+  });
+
+  it("excludes a project without hiding unrelated issues", () => {
+    const result = filterIssues(issues, {
+      ...NO_FILTER,
+      excludeProjectFilters: ["p-1"],
+    });
+    expect(result.map((i) => i.id)).toEqual(["2", "3"]);
   });
 
   it("applies status + project filters together", () => {

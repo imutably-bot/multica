@@ -20,6 +20,7 @@ describe("issue url state", () => {
       creatorFilters: [{ type: "squad", id: "s-1" }],
       projectFilters: ["proj-b", "proj-a"],
       includeNoProject: true,
+      excludeProjectFilters: ["proj-c"],
       labelFilters: ["label-2", "label-1"],
       dateFilter: { field: "updated_at", from: "2026-01-01", to: "2026-01-31" },
     };
@@ -40,6 +41,7 @@ describe("issue url state", () => {
         "project=proj-a",
         "project=proj-b",
         "noProject=1",
+        "excludeProject=proj-c",
         "label=label-1",
         "label=label-2",
         "dateField=updated_at",
@@ -66,6 +68,7 @@ describe("issue url state", () => {
       creatorFilters: [],
       projectFilters: [],
       includeNoProject: false,
+      excludeProjectFilters: [],
       labelFilters: [],
       dateFilter: null,
     };
@@ -75,5 +78,14 @@ describe("issue url state", () => {
     };
 
     expect(issueFilterUrlStateEquals(a, b)).toBe(true);
+  });
+
+  it("round-trips relative date presets", () => {
+    const next = readIssueFilterUrlState(
+      new URLSearchParams("dateField=created_at&datePreset=last_days&dateDays=7"),
+    );
+    expect(next.dateFilter?.preset).toBe("last_days");
+    expect(next.dateFilter?.days).toBe(7);
+    expect(next.dateFilter?.field).toBe("created_at");
   });
 });

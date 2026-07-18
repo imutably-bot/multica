@@ -34,6 +34,7 @@ function issueViewStateToFilterUrlState(
     creatorFilters: viewState.creatorFilters ?? [],
     projectFilters: viewState.projectFilters ?? [],
     includeNoProject: viewState.includeNoProject ?? false,
+    excludeProjectFilters: viewState.excludeProjectFilters ?? [],
     labelFilters: viewState.labelFilters ?? [],
     dateFilter: viewState.dateFilter ?? null,
   });
@@ -51,6 +52,7 @@ function applyUrlFilterStateToViewStore(
     creatorFilters: urlState.creatorFilters,
     projectFilters: urlState.projectFilters,
     includeNoProject: urlState.includeNoProject,
+    excludeProjectFilters: urlState.excludeProjectFilters,
     labelFilters: urlState.labelFilters,
     dateFilter: urlState.dateFilter,
   });
@@ -75,6 +77,7 @@ function IssuesSurfaceHeader({
   const creatorFilters = useViewStore((s) => s.creatorFilters);
   const projectFilters = useViewStore((s) => s.projectFilters);
   const includeNoProject = useViewStore((s) => s.includeNoProject);
+  const excludeProjectFilters = useViewStore((s) => s.excludeProjectFilters);
   const labelFilters = useViewStore((s) => s.labelFilters);
   const dateFilter = useViewStore((s) => s.dateFilter);
   const setDateFilter = useViewStore((s) => s.setDateFilter);
@@ -96,6 +99,7 @@ function IssuesSurfaceHeader({
         creatorFilters,
         projectFilters,
         includeNoProject,
+        excludeProjectFilters,
         labelFilters,
         dateFilter,
       }),
@@ -105,6 +109,7 @@ function IssuesSurfaceHeader({
       dateFilter,
       includeNoAssignee,
       includeNoProject,
+      excludeProjectFilters,
       labelFilters,
       priorityFilters,
       projectFilters,

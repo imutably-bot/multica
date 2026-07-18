@@ -7,7 +7,7 @@
  * Mobile still defers assignee / project / label filters; the shared
  * date range now matches the web filter menu for created_at / updated_at.
  */
-import { dateOnlyToUTCDate } from "@multica/core/issues/date";
+import { dateOnlyToUTCDate, resolveIssueDateFilterRange } from "@multica/core/issues/date";
 import type { Issue, IssuePriority, IssueStatus } from "@multica/core/types";
 import type { IssueDateFilter } from "@/data/stores/issue-date-filter";
 
@@ -15,9 +15,11 @@ function issueMatchesDateFilter(
   issue: Issue,
   filter: IssueDateFilter,
 ): boolean {
-  const issueDate = dateOnlyToUTCDate(issue[filter.field]);
-  const from = dateOnlyToUTCDate(filter.from);
-  const to = dateOnlyToUTCDate(filter.to);
+  const resolved = resolveIssueDateFilterRange(filter);
+  if (!resolved) return false;
+  const issueDate = dateOnlyToUTCDate(issue[resolved.field]);
+  const from = dateOnlyToUTCDate(resolved.from);
+  const to = dateOnlyToUTCDate(resolved.to);
   if (!issueDate || !from || !to) return false;
   const lower = from.getTime() <= to.getTime() ? from : to;
   const upper = from.getTime() <= to.getTime() ? to : from;

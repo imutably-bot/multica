@@ -23,6 +23,7 @@ export interface SavedIssueViewSnapshot {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   dateFilter: IssueDateFilter | null;
   sortBy: SortField;
@@ -61,6 +62,7 @@ export function snapshotIssueViewState(state: IssueViewState, scope: IssuesScope
     creatorFilters: cloneActorFilters(state.creatorFilters),
     projectFilters: [...state.projectFilters],
     includeNoProject: state.includeNoProject,
+    excludeProjectFilters: [...state.excludeProjectFilters],
     labelFilters: [...state.labelFilters],
     dateFilter: state.dateFilter ? { ...state.dateFilter } : null,
     sortBy: state.sortBy,
@@ -87,6 +89,7 @@ export function restoreIssueViewSnapshot(snapshot: SavedIssueViewSnapshot): Part
     creatorFilters: cloneActorFilters(snapshot.creatorFilters),
     projectFilters: [...snapshot.projectFilters],
     includeNoProject: snapshot.includeNoProject,
+    excludeProjectFilters: [...snapshot.excludeProjectFilters],
     labelFilters: [...snapshot.labelFilters],
     dateFilter: snapshot.dateFilter ? { ...snapshot.dateFilter } : null,
     sortBy: snapshot.sortBy,

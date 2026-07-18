@@ -23,6 +23,7 @@ import {
   createDefaultIssueDateFilter,
   type IssueDateField,
   type IssueDateFilter,
+  createMobileRelativeIssueDateFilter,
 } from "@/data/stores/issue-date-filter";
 import { useMyIssuesViewStore } from "@/data/stores/my-issues-view-store";
 import { BOARD_STATUSES, STATUS_LABEL } from "@/lib/issue-status";
@@ -99,26 +100,44 @@ export default function IssuesFilterRoute() {
   const hasActive =
     statusFilters.length > 0 || priorityFilters.length > 0 || !!dateFilter;
 
+  const isPresetActive = (preset: "today" | "last_days", days?: number) =>
+    !!dateFilter &&
+    dateFilter.preset === preset &&
+    (preset === "today" || (dateFilter.days ?? 3) === (days ?? 3));
+
   const onChangeDateField = (field: IssueDateField) => {
+    if (currentDateFilter.preset) {
+      setDateFilter(
+        createMobileRelativeIssueDateFilter(
+          field,
+          currentDateFilter.preset,
+          currentDateFilter.days,
+        ),
+      );
+      return;
+    }
     setDateFilter({ ...currentDateFilter, field });
+  };
+  const applyPreset = (preset: "today" | "last_days", days?: number) => {
+    setDateFilter(createMobileRelativeIssueDateFilter(currentDateFilter.field, preset, days));
   };
   const onChangeDateFrom = (selected: Date | undefined) => {
     if (!selected) return;
-    setDateFilter(
-      normalizeDateFilter({
-        ...currentDateFilter,
-        from: toDateOnly(selected),
-      }),
-    );
+    const next = normalizeDateFilter({
+      field: currentDateFilter.field,
+      from: toDateOnly(selected),
+      to: currentDateFilter.to,
+    });
+    setDateFilter(next);
   };
   const onChangeDateTo = (selected: Date | undefined) => {
     if (!selected) return;
-    setDateFilter(
-      normalizeDateFilter({
-        ...currentDateFilter,
-        to: toDateOnly(selected),
-      }),
-    );
+    const next = normalizeDateFilter({
+      field: currentDateFilter.field,
+      from: currentDateFilter.from,
+      to: toDateOnly(selected),
+    });
+    setDateFilter(next);
   };
 
   return (
@@ -138,6 +157,42 @@ export default function IssuesFilterRoute() {
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <SectionLabel>Date</SectionLabel>
         <View className="gap-3 px-4 pb-4">
+          <View className="flex-row gap-2">
+            <Pressable
+              onPress={() => applyPreset("today")}
+              className={cn(
+                "flex-1 rounded-xl border border-border px-3 py-2.5",
+                isPresetActive("today") && "border-primary bg-primary/10",
+              )}
+            >
+              <Text className="text-center text-sm font-medium text-foreground">
+                Today
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => applyPreset("last_days", 3)}
+              className={cn(
+                "flex-1 rounded-xl border border-border px-3 py-2.5",
+                isPresetActive("last_days", 3) && "border-primary bg-primary/10",
+              )}
+            >
+              <Text className="text-center text-sm font-medium text-foreground">
+                Last 3 days
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => applyPreset("last_days", 7)}
+              className={cn(
+                "flex-1 rounded-xl border border-border px-3 py-2.5",
+                isPresetActive("last_days", 7) && "border-primary bg-primary/10",
+              )}
+            >
+              <Text className="text-center text-sm font-medium text-foreground">
+                Last 7 days
+              </Text>
+            </Pressable>
+          </View>
+
           <RadioGroup
             value={currentDateFilter.field}
             onValueChange={(value) =>

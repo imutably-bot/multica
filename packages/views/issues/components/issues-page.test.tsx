@@ -169,6 +169,7 @@ const mockViewState = {
   creatorFilters: [] as { type: string; id: string }[],
   projectFilters: [] as string[],
   includeNoProject: false,
+  excludeProjectFilters: [] as string[],
   labelFilters: [] as string[],
   sortBy: "position" as const,
   sortDirection: "asc" as const,
