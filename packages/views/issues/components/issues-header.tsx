@@ -452,31 +452,33 @@ function ProjectSubContent({
           );
         })}
 
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-          {t(($) => $.filters.exclude_project)}
-        </DropdownMenuLabel>
-        {filtered.map((p) => {
-          const checked = excluded.includes(p.id);
-          const count = counts.get(p.id) ?? 0;
-          return (
-            <DropdownMenuCheckboxItem
-              key={`exclude-${p.id}`}
-              checked={checked}
-              onCheckedChange={() => onToggleExclude(p.id)}
-              className={FILTER_ITEM_CLASS}
-            >
-              <HoverCheck checked={checked} />
-              <FolderX className="size-3.5 text-muted-foreground" />
-              <span className="truncate">{p.title}</span>
-              {count > 0 && (
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {count}
-                </span>
-              )}
-            </DropdownMenuCheckboxItem>
-          );
-        })}
+        <DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+            {t(($) => $.filters.exclude_project)}
+          </DropdownMenuLabel>
+          {filtered.map((p) => {
+            const checked = excluded.includes(p.id);
+            const count = counts.get(p.id) ?? 0;
+            return (
+              <DropdownMenuCheckboxItem
+                key={`exclude-${p.id}`}
+                checked={checked}
+                onCheckedChange={() => onToggleExclude(p.id)}
+                className={FILTER_ITEM_CLASS}
+              >
+                <HoverCheck checked={checked} />
+                <FolderX className="size-3.5 text-muted-foreground" />
+                <span className="truncate">{p.title}</span>
+                {count > 0 && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {count}
+                  </span>
+                )}
+              </DropdownMenuCheckboxItem>
+            );
+          })}
+        </DropdownMenuGroup>
 
         {filtered.length === 0 && search && (
           <div className="px-2 py-3 text-center text-sm text-muted-foreground">
