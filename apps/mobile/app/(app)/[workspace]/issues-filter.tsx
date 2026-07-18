@@ -1,7 +1,7 @@
 /**
- * Status + Priority filter sheet — presented as a formSheet by the parent
- * Stack. Shared by My Issues and the workspace-wide Issues page; which
- * view-store to read/write is selected by the `scope` URL param.
+ * Status + Priority + Date filter sheet — presented as a formSheet by the
+ * parent Stack. Shared by My Issues and the workspace-wide Issues page;
+ * which view-store to read/write is selected by the `scope` URL param.
  *
  * Routes that open this sheet:
  *   - /[workspace]/issues-filter?scope=my   →  useMyIssuesViewStore
@@ -10,12 +10,20 @@
  * Self-contained: reads/writes the store directly, no callback passing.
  */
 import { Pressable, ScrollView, View } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams } from "expo-router";
 import type { IssuePriority, IssueStatus } from "@multica/core/types";
+import { dateOnlyToLocalDate, toDateOnly } from "@multica/core/issues/date";
 import { Text } from "@/components/ui/text";
 import { StatusIcon } from "@/components/ui/status-icon";
 import { PriorityIcon } from "@/components/ui/priority-icon";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useIssuesViewStore } from "@/data/stores/issues-view-store";
+import {
+  createDefaultIssueDateFilter,
+  type IssueDateField,
+  type IssueDateFilter,
+} from "@/data/stores/issue-date-filter";
 import { useMyIssuesViewStore } from "@/data/stores/my-issues-view-store";
 import { BOARD_STATUSES, STATUS_LABEL } from "@/lib/issue-status";
 import { cn } from "@/lib/utils";
@@ -41,6 +49,11 @@ const PRIORITY_LABEL: Record<IssuePriority, string> = {
   none: "No priority",
 };
 
+const DATE_FIELD_OPTIONS: { value: IssueDateField; label: string }[] = [
+  { value: "created_at", label: "Created date" },
+  { value: "updated_at", label: "Updated date" },
+];
+
 type Scope = "my" | "all";
 
 export default function IssuesFilterRoute() {
@@ -49,6 +62,9 @@ export default function IssuesFilterRoute() {
 
   const statusFilters = useScopedFilters(resolvedScope, "status");
   const priorityFilters = useScopedFilters(resolvedScope, "priority");
+  const allDateFilter = useIssuesViewStore((s) => s.dateFilter);
+  const myDateFilter = useMyIssuesViewStore((s) => s.dateFilter);
+  const dateFilter = resolvedScope === "all" ? allDateFilter : myDateFilter;
 
   const onToggleStatus = (s: IssueStatus) => {
     if (resolvedScope === "all") {
@@ -64,6 +80,13 @@ export default function IssuesFilterRoute() {
       useMyIssuesViewStore.getState().togglePriorityFilter(p);
     }
   };
+  const setDateFilter = (next: IssueDateFilter | null) => {
+    if (resolvedScope === "all") {
+      useIssuesViewStore.getState().setDateFilter(next);
+    } else {
+      useMyIssuesViewStore.getState().setDateFilter(next);
+    }
+  };
   const onClearFilters = () => {
     if (resolvedScope === "all") {
       useIssuesViewStore.getState().clearFilters();
@@ -72,7 +95,31 @@ export default function IssuesFilterRoute() {
     }
   };
 
-  const hasActive = statusFilters.length > 0 || priorityFilters.length > 0;
+  const currentDateFilter = dateFilter ?? createDefaultIssueDateFilter();
+  const hasActive =
+    statusFilters.length > 0 || priorityFilters.length > 0 || !!dateFilter;
+
+  const onChangeDateField = (field: IssueDateField) => {
+    setDateFilter({ ...currentDateFilter, field });
+  };
+  const onChangeDateFrom = (selected: Date | undefined) => {
+    if (!selected) return;
+    setDateFilter(
+      normalizeDateFilter({
+        ...currentDateFilter,
+        from: toDateOnly(selected),
+      }),
+    );
+  };
+  const onChangeDateTo = (selected: Date | undefined) => {
+    if (!selected) return;
+    setDateFilter(
+      normalizeDateFilter({
+        ...currentDateFilter,
+        to: toDateOnly(selected),
+      }),
+    );
+  };
 
   return (
     <View className="flex-1">
@@ -89,6 +136,54 @@ export default function IssuesFilterRoute() {
         ) : null}
       </View>
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <SectionLabel>Date</SectionLabel>
+        <View className="gap-3 px-4 pb-4">
+          <RadioGroup
+            value={currentDateFilter.field}
+            onValueChange={(value) =>
+              onChangeDateField(value as IssueDateField)
+            }
+            className="gap-0 rounded-xl border border-border overflow-hidden"
+          >
+            {DATE_FIELD_OPTIONS.map((option, idx) => {
+              const isLast = idx === DATE_FIELD_OPTIONS.length - 1;
+              return (
+                <View key={option.value}>
+                  <Pressable
+                    onPress={() => onChangeDateField(option.value)}
+                    className="flex-row items-center gap-3 px-4 py-3.5 active:bg-secondary"
+                  >
+                    <RadioGroupItem value={option.value} />
+                    <Text className="flex-1 text-sm font-medium text-foreground">
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                  {!isLast ? <View className="h-px bg-border ml-11" /> : null}
+                </View>
+              );
+            })}
+          </RadioGroup>
+
+          <DateRangeCard
+            label="From"
+            value={currentDateFilter.from}
+            onChange={onChangeDateFrom}
+            maximumDate={dateOnlyToLocalDate(currentDateFilter.to)}
+          />
+          <DateRangeCard
+            label="To"
+            value={currentDateFilter.to}
+            onChange={onChangeDateTo}
+            minimumDate={dateOnlyToLocalDate(currentDateFilter.from)}
+          />
+
+          {!dateFilter ? (
+            <Text className="px-1 text-xs text-muted-foreground">
+              Adjust a date to activate the filter.
+            </Text>
+          ) : null}
+        </View>
+
         <SectionLabel>Status</SectionLabel>
         {ALL_STATUSES.map((status) => {
           const checked = statusFilters.includes(status);
@@ -157,12 +252,48 @@ function useScopedFilters(
   return kind === "status" ? myStatus : myPriority;
 }
 
+function normalizeDateFilter(filter: IssueDateFilter): IssueDateFilter {
+  return filter.from <= filter.to
+    ? filter
+    : { ...filter, from: filter.to, to: filter.from };
+}
+
 function SectionLabel({ children }: { children: string }) {
   return (
     <View className="px-4 pt-3 pb-1.5">
       <Text className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
         {children}
       </Text>
+    </View>
+  );
+}
+
+function DateRangeCard({
+  label,
+  value,
+  onChange,
+  minimumDate,
+  maximumDate,
+}: {
+  label: string;
+  value: string;
+  onChange: (date: Date | undefined) => void;
+  minimumDate?: Date;
+  maximumDate?: Date;
+}) {
+  return (
+    <View className="gap-2 rounded-xl border border-border bg-card px-3 py-3">
+      <Text className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+        {label}
+      </Text>
+      <DateTimePicker
+        value={dateOnlyToLocalDate(value) ?? new Date()}
+        mode="date"
+        display="inline"
+        minimumDate={minimumDate}
+        maximumDate={maximumDate}
+        onChange={(_event, selected) => onChange(selected)}
+      />
     </View>
   );
 }

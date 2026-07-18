@@ -27,6 +27,7 @@
  */
 import { create } from "zustand";
 import type { IssuePriority, IssueStatus } from "@multica/core/types";
+import type { IssueDateFilter } from "./issue-date-filter";
 
 export type IssuesScope = "all" | "members" | "agents";
 
@@ -34,9 +35,11 @@ interface IssuesViewState {
   scope: IssuesScope;
   statusFilters: IssueStatus[];
   priorityFilters: IssuePriority[];
+  dateFilter: IssueDateFilter | null;
   setScope: (scope: IssuesScope) => void;
   toggleStatusFilter: (status: IssueStatus) => void;
   togglePriorityFilter: (priority: IssuePriority) => void;
+  setDateFilter: (filter: IssueDateFilter | null) => void;
   clearFilters: () => void;
 }
 
@@ -44,6 +47,7 @@ export const useIssuesViewStore = create<IssuesViewState>((set) => ({
   scope: "all",
   statusFilters: [],
   priorityFilters: [],
+  dateFilter: null,
   setScope: (scope) => set({ scope }),
   toggleStatusFilter: (status) =>
     set((state) => ({
@@ -57,5 +61,7 @@ export const useIssuesViewStore = create<IssuesViewState>((set) => ({
         ? state.priorityFilters.filter((p) => p !== priority)
         : [...state.priorityFilters, priority],
     })),
-  clearFilters: () => set({ statusFilters: [], priorityFilters: [] }),
+  setDateFilter: (dateFilter) => set({ dateFilter }),
+  clearFilters: () =>
+    set({ statusFilters: [], priorityFilters: [], dateFilter: null }),
 }));
