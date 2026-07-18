@@ -258,10 +258,11 @@ func (h *Handler) CreateProjectResource(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	userID, ok := requireUserID(w, r)
+	requester, ok := h.requireWorkspaceRole(w, r, uuidToString(project.WorkspaceID), "project not found", "owner", "admin")
 	if !ok {
 		return
 	}
+	userID := uuidToString(requester.UserID)
 	var req CreateProjectResourceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -340,11 +341,11 @@ func (h *Handler) UpdateProjectResource(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	resourceUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "resourceId"), "resource id")
+	requester, ok := h.requireWorkspaceRole(w, r, uuidToString(project.WorkspaceID), "project not found", "owner", "admin")
 	if !ok {
 		return
 	}
-	userID, ok := requireUserID(w, r)
+	resourceUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "resourceId"), "resource id")
 	if !ok {
 		return
 	}
@@ -434,7 +435,7 @@ func (h *Handler) UpdateProjectResource(w http.ResponseWriter, r *http.Request) 
 		protocol.EventProjectResourceUpdated,
 		uuidToString(project.WorkspaceID),
 		"member",
-		userID,
+		uuidToString(requester.UserID),
 		map[string]any{"resource": resp, "project_id": uuidToString(project.ID)},
 	)
 	writeJSON(w, http.StatusOK, resp)
@@ -493,11 +494,11 @@ func (h *Handler) DeleteProjectResource(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	resourceUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "resourceId"), "resource id")
+	requester, ok := h.requireWorkspaceRole(w, r, uuidToString(project.WorkspaceID), "project not found", "owner", "admin")
 	if !ok {
 		return
 	}
-	userID, ok := requireUserID(w, r)
+	resourceUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "resourceId"), "resource id")
 	if !ok {
 		return
 	}
@@ -520,7 +521,7 @@ func (h *Handler) DeleteProjectResource(w http.ResponseWriter, r *http.Request) 
 		protocol.EventProjectResourceDeleted,
 		uuidToString(project.WorkspaceID),
 		"member",
-		userID,
+		uuidToString(requester.UserID),
 		map[string]any{
 			"project_id":  uuidToString(project.ID),
 			"resource_id": uuidToString(resource.ID),
