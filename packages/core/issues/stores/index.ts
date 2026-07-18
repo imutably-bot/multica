@@ -44,6 +44,11 @@ export {
   type IssueViewState,
 } from "./view-store";
 export {
+  useIssueSavedViewsStore,
+  restoreSavedIssueView,
+  type SavedIssueView,
+} from "./saved-views-store";
+export {
   ISSUE_SURFACE_VIEW_STORAGE_KEY,
   getIssueSurfaceViewStore,
   clearIssueSurfaceViewState,

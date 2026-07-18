@@ -50,7 +50,7 @@ vi.mock("../../navigation", () => ({
       {children}
     </a>
   ),
-  useNavigation: () => ({ push: vi.fn(), pathname: "/issues" }),
+  useNavigation: () => ({ push: vi.fn(), pathname: "/issues", searchParams: new URLSearchParams() }),
   NavigationProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -245,6 +245,13 @@ vi.mock("@multica/core/issues/stores/issues-scope-store", () => ({
     },
     { getState: () => ({ scope: mockScope, setScope: vi.fn() }) },
   ),
+}));
+vi.mock("@multica/core/issues/stores", () => ({
+  useIssueSavedViewsStore: Object.assign(
+    (selector?: any) => (selector ? selector({ views: [], saveView: vi.fn(), deleteView: vi.fn() }) : { views: [], saveView: vi.fn(), deleteView: vi.fn() }),
+    { getState: () => ({ views: [], saveView: vi.fn(), deleteView: vi.fn() }) },
+  ),
+  restoreSavedIssueView: (view: any) => ({ scope: view.snapshot?.scope ?? "all", viewState: view.snapshot ?? view }),
 }));
 
 vi.mock("@multica/core/issues/stores/selection-store", () => ({
