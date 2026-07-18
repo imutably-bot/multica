@@ -588,9 +588,26 @@ func (h *Handler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := requestUserID(r)
 
+	q := r.URL.Query().Get("q")
+	includeArchived := r.URL.Query().Get("include_archived") == "true"
+
 	var agents []db.Agent
 	var err error
-	if r.URL.Query().Get("include_archived") == "true" {
+	if q != "" {
+		var pattern string
+		if !strings.Contains(q, "*") && !strings.Contains(q, "?") {
+			pattern = "%" + escapeLikeWithWildcards(q) + "%"
+		} else {
+			pattern = escapeLikeWithWildcards(q)
+		}
+		pattern = strings.ToLower(pattern)
+
+		agents, err = h.Queries.SearchAgents(r.Context(), db.SearchAgentsParams{
+			WorkspaceID:     parseUUID(workspaceID),
+			Name:            pattern,
+			IncludeArchived: includeArchived,
+		})
+	} else if includeArchived {
 		agents, err = h.Queries.ListAllAgents(r.Context(), parseUUID(workspaceID))
 	} else {
 		agents, err = h.Queries.ListAgents(r.Context(), parseUUID(workspaceID))
