@@ -49,6 +49,15 @@ export function agentListOptions(wsId: string) {
   });
 }
 
+export function projectAgentListOptions(wsId: string, projectId: string) {
+  return queryOptions({
+    queryKey: [...workspaceKeys.agents(wsId), "project", projectId],
+    queryFn: () =>
+      api.listAgents({ workspace_id: wsId, project_id: projectId, include_archived: false }),
+    enabled: !!wsId && !!projectId,
+  });
+}
+
 export function squadListOptions(wsId: string) {
   return queryOptions<Squad[]>({
     queryKey: workspaceKeys.squads(wsId),

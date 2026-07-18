@@ -26,6 +26,7 @@ import { TitleEditor, ContentEditor, type ContentEditorRef } from "../../editor"
 import { PriorityIcon } from "../../issues/components/priority-icon";
 import { ProjectMembersSection } from "./project-members-section";
 import { ProjectResourcesSection } from "./project-resources-section";
+import { ProjectAgentsSection } from "./project-agents-section";
 import { IssueSurface } from "../../issues/surface/issue-surface";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { Button } from "@multica/ui/components/ui/button";
@@ -456,6 +457,9 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       </div>
 
       <ProjectMembersSection projectId={projectId} members={members} canManage={isWorkspaceAdmin} />
+
+      {/* Agents */}
+      <ProjectAgentsSection projectId={projectId} agents={agents} canManage={isWorkspaceAdmin} />
 
       {/* Resources */}
       <ProjectResourcesSection projectId={projectId} />

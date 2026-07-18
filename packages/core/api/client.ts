@@ -842,11 +842,37 @@ export class ApiClient {
   }
 
   // Agents
-  async listAgents(params?: { workspace_id?: string; include_archived?: boolean }): Promise<Agent[]> {
+  async listAgents(params?: { workspace_id?: string; project_id?: string; include_archived?: boolean }): Promise<Agent[]> {
     const search = new URLSearchParams();
     if (params?.workspace_id) search.set("workspace_id", params.workspace_id);
+    if (params?.project_id) search.set("project_id", params.project_id);
     if (params?.include_archived) search.set("include_archived", "true");
     return this.fetch(`/api/agents?${search}`);
+  }
+
+  async setProjectAgents(projectId: string, agentIds: string[]): Promise<void> {
+    await this.fetch(`/api/projects/${projectId}/agents`, {
+      method: "PUT",
+      body: JSON.stringify({ agent_ids: agentIds }),
+    });
+  }
+
+  async addAgentsToProject(projectId: string, agentIds: string[]): Promise<void> {
+    await this.fetch(`/api/projects/${projectId}/agents`, {
+      method: "POST",
+      body: JSON.stringify({ agent_ids: agentIds }),
+    });
+  }
+
+  async removeAgentsFromProject(projectId: string, agentIds: string[]): Promise<void> {
+    await this.fetch(`/api/projects/${projectId}/agents`, {
+      method: "DELETE",
+      body: JSON.stringify({ agent_ids: agentIds }),
+    });
+  }
+
+  async listProjectAgents(projectId: string): Promise<{ agents: Agent[]; total: number }> {
+    return this.fetch(`/api/projects/${projectId}/agents`);
   }
 
   async getAgent(id: string): Promise<Agent> {
