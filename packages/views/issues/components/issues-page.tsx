@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { ListTodo } from "lucide-react";
 import type { Issue } from "@multica/core/types";
 import { useIssuesScopeStore } from "@multica/core/issues/stores/issues-scope-store";
-import { useIssueSavedViewsStore, restoreSavedIssueView } from "@multica/core/issues/stores";
+import { useIssueSavedViewsStore, restoreSavedIssueView, type SavedIssueView } from "@multica/core/issues/stores";
 import { useViewStore, useViewStoreApi } from "@multica/core/issues/stores/view-store-context";
 import { useNavigation } from "../../navigation";
 import { PageHeader } from "../../layout/page-header";
@@ -25,16 +25,18 @@ function IssuesSurfaceHeader({
   const setDateFilter = useViewStore((s) => s.setDateFilter);
   const viewStoreApi = useViewStoreApi();
   const savedViews = useIssueSavedViewsStore((s) => s.views);
+  const activeSavedView: SavedIssueView | null = (() => {
+    const viewId = searchParams.get("view");
+    if (!viewId) return null;
+    return savedViews.find((view) => view.id === viewId) ?? null;
+  })();
 
   useEffect(() => {
-    const viewId = searchParams.get("view");
-    if (!viewId) return;
-    const saved = savedViews.find((view) => view.id === viewId);
-    if (!saved) return;
-    const restored = restoreSavedIssueView(saved);
+    if (!activeSavedView) return;
+    const restored = restoreSavedIssueView(activeSavedView);
     setScope(restored.scope);
     viewStoreApi.setState(restored.viewState);
-  }, [savedViews, searchParams, setScope, viewStoreApi]);
+  }, [activeSavedView, setScope, viewStoreApi]);
 
   return (
     <IssuesHeader
@@ -42,6 +44,7 @@ function IssuesSurfaceHeader({
       dateFilter={dateFilter}
       onDateFilterChange={setDateFilter}
       isRefreshing={isRefreshing}
+      activeSavedView={activeSavedView}
     />
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -17,10 +17,12 @@ import {
   SignalHigh,
   SlidersHorizontal,
   X,
+  SquarePen,
   Tag,
   User,
   UserMinus,
   UserPen,
+  Trash2,
   Waves,
 } from "lucide-react";
 import { Button } from "@multica/ui/components/ui/button";
@@ -97,6 +99,7 @@ import { useT } from "../../i18n";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../../common/hover-check";
 import { WorkspaceAgentWorkingChip } from "./workspace-agent-working-chip";
+import type { SavedIssueView } from "@multica/core/issues/stores";
 
 type LocalDateRange = {
   from: Date | undefined;
@@ -658,7 +661,13 @@ export function ViewRefreshIndicator({ active }: { active: boolean }) {
   );
 }
 
-function SaveCurrentViewDialog({ disabled }: { disabled?: boolean }) {
+function SaveCurrentViewDialog({
+  disabled,
+  triggerLabel = "Save view",
+}: {
+  disabled?: boolean;
+  triggerLabel?: string;
+}) {
   const navigation = useNavigation();
   const workspacePaths = useWorkspacePaths();
   const scope = useIssuesScopeStore((s) => s.scope);
@@ -689,11 +698,11 @@ function SaveCurrentViewDialog({ disabled }: { disabled?: boolean }) {
         className="h-8 gap-1.5 text-muted-foreground md:h-7"
         onClick={() => setOpen(true)}
         disabled={disabled}
-        aria-label="Save view"
-        title="Save view"
+        aria-label={triggerLabel}
+        title={triggerLabel}
       >
         <BookmarkPlus className="size-3.5" />
-        <span className="hidden md:inline">Save view</span>
+        <span className="hidden md:inline">{triggerLabel}</span>
       </Button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -730,6 +739,100 @@ function SaveCurrentViewDialog({ disabled }: { disabled?: boolean }) {
   );
 }
 
+function EditSavedViewDialog({ savedView }: { savedView: SavedIssueView }) {
+  const navigation = useNavigation();
+  const workspacePaths = useWorkspacePaths();
+  const scope = useIssuesScopeStore((s) => s.scope);
+  const viewStoreApi = useViewStoreApi();
+  const saveView = useIssueSavedViewsStore((s) => s.saveView);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(savedView.name);
+
+  useEffect(() => {
+    if (open) {
+      setName(savedView.name);
+    }
+  }, [open, savedView.name]);
+
+  const handleSave = () => {
+    const view = saveView(name, viewStoreApi.getState(), scope, savedView.id);
+    navigation.push(workspacePaths.issueView(view.id));
+    setOpen(false);
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5 text-muted-foreground md:h-7"
+        onClick={() => setOpen(true)}
+        aria-label="Edit saved view"
+        title="Edit saved view"
+      >
+        <SquarePen className="size-3.5" />
+        <span className="hidden md:inline">Edit view</span>
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit issue view</DialogTitle>
+            <DialogDescription>
+              Update the name or filters for this saved view. Changes overwrite the existing view.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="saved-view-edit-name">
+              View name
+            </label>
+            <Input
+              id="saved-view-edit-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Custom view"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!name.trim()}>
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function DeleteSavedViewButton({ savedView }: { savedView: SavedIssueView }) {
+  const navigation = useNavigation();
+  const workspacePaths = useWorkspacePaths();
+  const deleteView = useIssueSavedViewsStore((s) => s.deleteView);
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon-sm"
+      className="size-8 shrink-0 text-muted-foreground md:size-7"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteView(savedView.id);
+        navigation.push(workspacePaths.issues());
+      }}
+      aria-label="Delete saved view"
+      title="Delete saved view"
+    >
+      <Trash2 className="size-3.5" />
+    </Button>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // IssuesHeader
 // ---------------------------------------------------------------------------
@@ -740,12 +843,14 @@ export function IssuesHeader({
   dateFilter = null,
   onDateFilterChange,
   isRefreshing = false,
+  activeSavedView = null,
 }: {
   scopedIssues: Issue[];
   allowGantt?: boolean;
   dateFilter?: IssueDateFilter | null;
   onDateFilterChange?: (filter: IssueDateFilter | null) => void;
   isRefreshing?: boolean;
+  activeSavedView?: SavedIssueView | null;
 }) {
   const { t } = useT("issues");
   const scope = useIssuesScopeStore((s) => s.scope);
@@ -847,6 +952,7 @@ export function IssuesHeader({
             allowGantt={allowGantt}
             dateFilter={dateFilter}
             onDateFilterChange={onDateFilterChange}
+            activeSavedView={activeSavedView}
           />
           <ViewRefreshIndicator active={isRefreshing} />
         </div>
@@ -861,11 +967,13 @@ export function IssueDisplayControls({
   allowGantt = false,
   dateFilter = null,
   onDateFilterChange,
+  activeSavedView = null,
 }: {
   scopedIssues: Issue[];
   hideViewToggle?: boolean;
   dateFilter?: IssueDateFilter | null;
   onDateFilterChange?: (filter: IssueDateFilter | null) => void;
+  activeSavedView?: SavedIssueView | null;
   // Only Project Detail renders <GanttView>; other surfaces (global /issues,
   // /my-issues, actor panel) ignore viewMode === "gantt" and would silently
   // fall back to List if the option were exposed there. Keep Gantt opt-in.
@@ -891,6 +999,7 @@ export function IssueDisplayControls({
   const viewStoreApi = useViewStoreApi();
   const act = viewStoreApi.getState();
   const canSaveView = navigation.pathname.endsWith("/issues");
+  const canEditSavedView = canSaveView && !!activeSavedView;
 
   const counts = useIssueCounts(scopedIssues);
   const showDateFilter = !!onDateFilterChange;
@@ -1195,7 +1304,16 @@ export function IssueDisplayControls({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
-        <SaveCurrentViewDialog disabled={!canSaveView} />
+        <SaveCurrentViewDialog
+          disabled={!canSaveView}
+          triggerLabel={activeSavedView ? "Save as new" : "Save view"}
+        />
+        {canEditSavedView && activeSavedView && (
+          <div className="flex items-center gap-1">
+            <EditSavedViewDialog savedView={activeSavedView} />
+            <DeleteSavedViewButton savedView={activeSavedView} />
+          </div>
+        )}
 
         {/* Display settings */}
         <Popover>
