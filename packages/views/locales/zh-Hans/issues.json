@@ -46,6 +46,7 @@
     "section_assignee": "负责人",
     "section_creator": "创建者",
     "section_project": "项目",
+    "exclude_project": "排除项目",
     "section_label": "标签",
     "section_date": "日期",
     "date_field": "字段",

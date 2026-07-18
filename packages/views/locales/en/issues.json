@@ -46,6 +46,7 @@
     "section_assignee": "Assignee",
     "section_creator": "Creator",
     "section_project": "Project",
+    "exclude_project": "Exclude project",
     "section_label": "Label",
     "section_date": "Date",
     "date_field": "Field",

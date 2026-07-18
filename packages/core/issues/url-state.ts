@@ -6,6 +6,7 @@ import type {
   SortField,
 } from "./stores/view-store";
 import type { IssuesScope } from "./stores/issues-scope-store";
+import { createRelativeIssueDateFilter } from "./date";
 
 export interface IssueFilterUrlState {
   scope: IssuesScope;
@@ -16,6 +17,7 @@ export interface IssueFilterUrlState {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   dateFilter: IssueDateFilter | null;
 }
@@ -34,6 +36,7 @@ export interface IssueViewUrlStateInput {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   dateFilter: IssueDateFilter | null;
   sortBy: SortField;
@@ -49,10 +52,13 @@ const URL_KEYS = {
   creator: "creator",
   project: "project",
   includeNoProject: "noProject",
+  excludeProject: "excludeProject",
   label: "label",
   dateField: "dateField",
   dateFrom: "dateFrom",
   dateTo: "dateTo",
+  datePreset: "datePreset",
+  dateDays: "dateDays",
 } as const;
 
 const DEFAULT_FILTER_URL_STATE: IssueFilterUrlState = {
@@ -64,6 +70,7 @@ const DEFAULT_FILTER_URL_STATE: IssueFilterUrlState = {
   creatorFilters: [],
   projectFilters: [],
   includeNoProject: false,
+  excludeProjectFilters: [],
   labelFilters: [],
   dateFilter: null,
 };
@@ -101,12 +108,15 @@ export function normalizeIssueFilterUrlState(state: IssueFilterUrlState): IssueF
     creatorFilters: sortActors(state.creatorFilters),
     projectFilters: sortedUnique(state.projectFilters),
     includeNoProject: state.includeNoProject,
+    excludeProjectFilters: sortedUnique(state.excludeProjectFilters),
     labelFilters: sortedUnique(state.labelFilters),
     dateFilter: state.dateFilter
       ? {
           field: state.dateFilter.field,
           from: state.dateFilter.from,
           to: state.dateFilter.to,
+          preset: state.dateFilter.preset,
+          days: state.dateFilter.days,
         }
       : null,
   };
@@ -122,10 +132,13 @@ export function hasIssueFilterUrlState(searchParams: URLSearchParams): boolean {
     URL_KEYS.creator,
     URL_KEYS.project,
     URL_KEYS.includeNoProject,
+    URL_KEYS.excludeProject,
     URL_KEYS.label,
     URL_KEYS.dateField,
     URL_KEYS.dateFrom,
     URL_KEYS.dateTo,
+    URL_KEYS.datePreset,
+    URL_KEYS.dateDays,
   ]) {
     if (searchParams.has(key)) return true;
   }
@@ -151,17 +164,32 @@ export function readIssueFilterUrlState(searchParams: URLSearchParams): IssueFil
       .filter((value): value is ActorFilterValue => !!value),
     projectFilters: sortedUnique(searchParams.getAll(URL_KEYS.project)),
     includeNoProject: searchParams.get(URL_KEYS.includeNoProject) === "1",
+    excludeProjectFilters: sortedUnique(searchParams.getAll(URL_KEYS.excludeProject)),
     labelFilters: sortedUnique(searchParams.getAll(URL_KEYS.label)),
-    dateFilter:
-      searchParams.get(URL_KEYS.dateField) &&
-      searchParams.get(URL_KEYS.dateFrom) &&
-      searchParams.get(URL_KEYS.dateTo)
-        ? {
-            field: searchParams.get(URL_KEYS.dateField) === "updated_at" ? "updated_at" : "created_at",
-            from: searchParams.get(URL_KEYS.dateFrom)!,
-            to: searchParams.get(URL_KEYS.dateTo)!,
-          }
-        : null,
+    dateFilter: (() => {
+      const fieldValue = searchParams.get(URL_KEYS.dateField);
+      const field = fieldValue === "updated_at" ? "updated_at" : fieldValue === "created_at" ? "created_at" : null;
+      if (!field) return null;
+
+      const preset = searchParams.get(URL_KEYS.datePreset);
+      if (preset === "today") {
+        return createRelativeIssueDateFilter(field, "today");
+      }
+      if (preset === "last_days") {
+        const parsedDays = Number(searchParams.get(URL_KEYS.dateDays) ?? "3");
+        const days = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : 3;
+        return createRelativeIssueDateFilter(field, "last_days", days);
+      }
+
+      const from = searchParams.get(URL_KEYS.dateFrom);
+      const to = searchParams.get(URL_KEYS.dateTo);
+      if (!from || !to) return null;
+      return {
+        field,
+        from,
+        to,
+      };
+    })(),
   };
 
   return normalizeIssueFilterUrlState(state);
@@ -179,6 +207,7 @@ export function issueFilterUrlStateEquals(a: IssueFilterUrlState, b: IssueFilter
     JSON.stringify(left.assigneeFilters) === JSON.stringify(right.assigneeFilters) &&
     JSON.stringify(left.creatorFilters) === JSON.stringify(right.creatorFilters) &&
     JSON.stringify(left.projectFilters) === JSON.stringify(right.projectFilters) &&
+    JSON.stringify(left.excludeProjectFilters) === JSON.stringify(right.excludeProjectFilters) &&
     JSON.stringify(left.labelFilters) === JSON.stringify(right.labelFilters) &&
     JSON.stringify(left.dateFilter) === JSON.stringify(right.dateFilter)
   );
@@ -194,6 +223,7 @@ export function issueViewUrlStateFromInput(input: IssueViewUrlStateInput): Issue
     creatorFilters: input.creatorFilters,
     projectFilters: input.projectFilters,
     includeNoProject: input.includeNoProject,
+    excludeProjectFilters: input.excludeProjectFilters,
     labelFilters: input.labelFilters,
     dateFilter: input.dateFilter,
   });
@@ -219,10 +249,13 @@ export function applyIssueFilterUrlState(
     URL_KEYS.creator,
     URL_KEYS.project,
     URL_KEYS.includeNoProject,
+    URL_KEYS.excludeProject,
     URL_KEYS.label,
     URL_KEYS.dateField,
     URL_KEYS.dateFrom,
     URL_KEYS.dateTo,
+    URL_KEYS.datePreset,
+    URL_KEYS.dateDays,
   ]) {
     next.delete(key);
   }
@@ -236,11 +269,19 @@ export function applyIssueFilterUrlState(
   for (const value of normalized.creatorFilters) next.append(URL_KEYS.creator, `${value.type}:${value.id}`);
   for (const value of normalized.projectFilters) next.append(URL_KEYS.project, value);
   if (normalized.includeNoProject) next.set(URL_KEYS.includeNoProject, "1");
+  for (const value of normalized.excludeProjectFilters) next.append(URL_KEYS.excludeProject, value);
   for (const value of normalized.labelFilters) next.append(URL_KEYS.label, value);
   if (normalized.dateFilter) {
     next.set(URL_KEYS.dateField, normalized.dateFilter.field);
-    next.set(URL_KEYS.dateFrom, normalized.dateFilter.from);
-    next.set(URL_KEYS.dateTo, normalized.dateFilter.to);
+    if (normalized.dateFilter.preset === "today") {
+      next.set(URL_KEYS.datePreset, "today");
+    } else if (normalized.dateFilter.preset === "last_days") {
+      next.set(URL_KEYS.datePreset, "last_days");
+      next.set(URL_KEYS.dateDays, String(normalized.dateFilter.days ?? 3));
+    } else {
+      next.set(URL_KEYS.dateFrom, normalized.dateFilter.from);
+      next.set(URL_KEYS.dateTo, normalized.dateFilter.to);
+    }
   }
 
   return next;

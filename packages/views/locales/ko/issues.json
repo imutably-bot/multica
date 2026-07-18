@@ -46,6 +46,7 @@
     "section_assignee": "담당자",
     "section_creator": "생성자",
     "section_project": "프로젝트",
+    "exclude_project": "프로젝트 제외",
     "section_label": "라벨",
     "section_date": "날짜",
     "date_field": "필드",

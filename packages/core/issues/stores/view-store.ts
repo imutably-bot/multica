@@ -16,11 +16,14 @@ export type SwimlaneGrouping = "parent" | "project" | "assignee";
 export type SortField = "position" | "priority" | "start_date" | "due_date" | "created_at" | "updated_at" | "title";
 export type SortDirection = "asc" | "desc";
 export type IssueDateField = "created_at" | "updated_at";
+export type IssueDatePreset = "today" | "last_days";
 
 export interface IssueDateFilter {
   field: IssueDateField;
   from: string;
   to: string;
+  preset?: IssueDatePreset;
+  days?: number;
 }
 
 export const SWIMLANE_GROUPINGS: SwimlaneGrouping[] = ["parent", "project", "assignee"];
@@ -77,6 +80,7 @@ export interface IssueViewState {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   dateFilter: IssueDateFilter | null;
   // When true, the list only shows issues that currently have at least one
@@ -115,6 +119,7 @@ export interface IssueViewState {
   toggleCreatorFilter: (value: ActorFilterValue) => void;
   toggleProjectFilter: (projectId: string) => void;
   toggleNoProject: () => void;
+  toggleExcludeProjectFilter: (projectId: string) => void;
   toggleLabelFilter: (labelId: string) => void;
   setDateFilter: (filter: IssueDateFilter | null) => void;
   toggleAgentRunningFilter: () => void;
@@ -143,6 +148,7 @@ export const viewStoreSlice = (set: StoreApi<IssueViewState>["setState"]): Issue
   creatorFilters: [],
   projectFilters: [],
   includeNoProject: false,
+  excludeProjectFilters: [],
   labelFilters: [],
   dateFilter: null,
   agentRunningFilter: false,
@@ -213,12 +219,20 @@ export const viewStoreSlice = (set: StoreApi<IssueViewState>["setState"]): Issue
     }),
   toggleProjectFilter: (projectId) =>
     set((state) => ({
+      excludeProjectFilters: state.excludeProjectFilters.filter((id) => id !== projectId),
       projectFilters: state.projectFilters.includes(projectId)
         ? state.projectFilters.filter((id) => id !== projectId)
         : [...state.projectFilters, projectId],
     })),
   toggleNoProject: () =>
     set((state) => ({ includeNoProject: !state.includeNoProject })),
+  toggleExcludeProjectFilter: (projectId) =>
+    set((state) => ({
+      projectFilters: state.projectFilters.filter((id) => id !== projectId),
+      excludeProjectFilters: state.excludeProjectFilters.includes(projectId)
+        ? state.excludeProjectFilters.filter((id) => id !== projectId)
+        : [...state.excludeProjectFilters, projectId],
+    })),
   toggleLabelFilter: (labelId) =>
     set((state) => ({
       labelFilters: state.labelFilters.includes(labelId)
@@ -253,6 +267,7 @@ export const viewStoreSlice = (set: StoreApi<IssueViewState>["setState"]): Issue
       creatorFilters: [],
       projectFilters: [],
       includeNoProject: false,
+      excludeProjectFilters: [],
       labelFilters: [],
       dateFilter: null,
       agentRunningFilter: false,

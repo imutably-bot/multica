@@ -13,6 +13,7 @@ import {
   Filter,
   FolderKanban,
   FolderMinus,
+  FolderX,
   List,
   SignalHigh,
   SlidersHorizontal,
@@ -118,6 +119,7 @@ function getActiveFilterCount(state: {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   dateFilter?: IssueDateFilter | null;
 }) {
@@ -126,7 +128,7 @@ function getActiveFilterCount(state: {
   if (state.priorityFilters.length > 0) count++;
   if (state.assigneeFilters.length > 0 || state.includeNoAssignee) count++;
   if (state.creatorFilters.length > 0) count++;
-  if (state.projectFilters.length > 0 || state.includeNoProject) count++;
+  if (state.projectFilters.length > 0 || state.includeNoProject || state.excludeProjectFilters.length > 0) count++;
   if (state.labelFilters.length > 0) count++;
   if (state.dateFilter) count++;
   return count;
@@ -372,14 +374,18 @@ function ActorSubContent({
 function ProjectSubContent({
   counts,
   selected,
+  excluded,
   onToggle,
+  onToggleExclude,
   includeNoProject,
   onToggleNoProject,
   noProjectCount,
 }: {
   counts: Map<string, number>;
   selected: string[];
+  excluded: string[];
   onToggle: (projectId: string) => void;
+  onToggleExclude: (projectId: string) => void;
   includeNoProject: boolean;
   onToggleNoProject: () => void;
   noProjectCount: number;
@@ -436,6 +442,32 @@ function ProjectSubContent({
             >
               <HoverCheck checked={checked} />
               <ProjectIcon project={p} size="sm" />
+              <span className="truncate">{p.title}</span>
+              {count > 0 && (
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {count}
+                </span>
+              )}
+            </DropdownMenuCheckboxItem>
+          );
+        })}
+
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+          {t(($) => $.filters.exclude_project)}
+        </DropdownMenuLabel>
+        {filtered.map((p) => {
+          const checked = excluded.includes(p.id);
+          const count = counts.get(p.id) ?? 0;
+          return (
+            <DropdownMenuCheckboxItem
+              key={`exclude-${p.id}`}
+              checked={checked}
+              onCheckedChange={() => onToggleExclude(p.id)}
+              className={FILTER_ITEM_CLASS}
+            >
+              <HoverCheck checked={checked} />
+              <FolderX className="size-3.5 text-muted-foreground" />
               <span className="truncate">{p.title}</span>
               {count > 0 && (
                 <span className="ml-auto text-xs text-muted-foreground">
@@ -989,6 +1021,7 @@ export function IssueDisplayControls({
   const creatorFilters = useViewStore((s) => s.creatorFilters);
   const projectFilters = useViewStore((s) => s.projectFilters);
   const includeNoProject = useViewStore((s) => s.includeNoProject);
+  const excludeProjectFilters = useViewStore((s) => s.excludeProjectFilters);
   const labelFilters = useViewStore((s) => s.labelFilters);
   const sortBy = useViewStore((s) => s.sortBy);
   const sortDirection = useViewStore((s) => s.sortDirection);
@@ -1012,6 +1045,7 @@ export function IssueDisplayControls({
     creatorFilters,
     projectFilters,
     includeNoProject,
+    excludeProjectFilters,
     labelFilters,
     dateFilter: showDateFilter ? dateFilter : null,
   });
@@ -1247,12 +1281,12 @@ export function IssueDisplayControls({
 
             {/* Project */}
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger openOnHover={false}>
                 <FolderKanban className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_project)}</span>
-                {(projectFilters.length > 0 || includeNoProject) && (
+                {(projectFilters.length > 0 || includeNoProject || excludeProjectFilters.length > 0) && (
                   <span className="text-xs text-primary font-medium">
-                    {projectFilters.length + (includeNoProject ? 1 : 0)}
+                    {projectFilters.length + (includeNoProject ? 1 : 0) + excludeProjectFilters.length}
                   </span>
                 )}
               </DropdownMenuSubTrigger>
@@ -1260,7 +1294,9 @@ export function IssueDisplayControls({
                 <ProjectSubContent
                   counts={counts.project}
                   selected={projectFilters}
+                  excluded={excludeProjectFilters}
                   onToggle={act.toggleProjectFilter}
+                  onToggleExclude={act.toggleExcludeProjectFilter}
                   includeNoProject={includeNoProject}
                   onToggleNoProject={act.toggleNoProject}
                   noProjectCount={counts.noProject}

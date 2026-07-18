@@ -46,6 +46,7 @@
     "section_assignee": "担当者",
     "section_creator": "作成者",
     "section_project": "プロジェクト",
+    "exclude_project": "プロジェクトを除外",
     "section_label": "ラベル",
     "section_date": "日付",
     "date_field": "項目",
