@@ -681,7 +681,7 @@ function ActorPicker({
                   }}
                 >
                   <ActorAvatar actorType="agent" actorId={a.id} size={18} />
-                  <span className="truncate">{a.name}</span>
+                  <span className="whitespace-normal break-all">{a.name}</span>
                 </PickerItem>
               ))}
             </PickerSection>
@@ -698,7 +698,7 @@ function ActorPicker({
                   }}
                 >
                   <ActorAvatar actorType="squad" actorId={s.id} size={18} />
-                  <span className="truncate">{s.name}</span>
+                  <span className="whitespace-normal break-all">{s.name}</span>
                 </PickerItem>
               ))}
             </PickerSection>

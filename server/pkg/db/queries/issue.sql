@@ -110,6 +110,14 @@ UPDATE issue SET
 WHERE id = $1 AND workspace_id = $3
 RETURNING *;
 
+-- name: TouchIssueUpdatedAt :one
+-- Comment writes use this to bump the parent issue's freshness without
+-- changing any visible field values.
+UPDATE issue SET
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING updated_at;
+
 -- name: CreateIssueWithOrigin :one
 INSERT INTO issue (
     workspace_id, title, description, status, priority,

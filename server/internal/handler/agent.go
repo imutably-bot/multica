@@ -588,9 +588,26 @@ func (h *Handler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := requestUserID(r)
 
+	q := r.URL.Query().Get("q")
+	includeArchived := r.URL.Query().Get("include_archived") == "true"
+
 	var agents []db.Agent
 	var err error
-	if r.URL.Query().Get("include_archived") == "true" {
+	if q != "" {
+		var pattern string
+		if !strings.Contains(q, "*") && !strings.Contains(q, "?") {
+			pattern = "%" + escapeLikeWithWildcards(q) + "%"
+		} else {
+			pattern = escapeLikeWithWildcards(q)
+		}
+		pattern = strings.ToLower(pattern)
+
+		agents, err = h.Queries.SearchAgents(r.Context(), db.SearchAgentsParams{
+			WorkspaceID:     parseUUID(workspaceID),
+			Name:            pattern,
+			IncludeArchived: includeArchived,
+		})
+	} else if includeArchived {
 		agents, err = h.Queries.ListAllAgents(r.Context(), parseUUID(workspaceID))
 	} else {
 		agents, err = h.Queries.ListAgents(r.Context(), parseUUID(workspaceID))
@@ -679,6 +696,109 @@ func (h *Handler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, visible)
+}
+
+func (h *Handler) SearchAgents(w http.ResponseWriter, r *http.Request) {
+	workspaceID := h.resolveWorkspaceID(r)
+	member, ok := h.workspaceMember(w, r, workspaceID)
+	if !ok {
+		return
+	}
+	userID := requestUserID(r)
+
+	q := r.URL.Query().Get("q")
+	includeArchived := r.URL.Query().Get("include_archived") == "true"
+
+	var pattern string
+	if !strings.Contains(q, "*") && !strings.Contains(q, "?") {
+		pattern = "%" + escapeLikeWithWildcards(q) + "%"
+	} else {
+		pattern = escapeLikeWithWildcards(q)
+	}
+	pattern = strings.ToLower(pattern)
+
+	agents, err := h.Queries.SearchAgents(r.Context(), db.SearchAgentsParams{
+		WorkspaceID:     parseUUID(workspaceID),
+		Name:            pattern,
+		IncludeArchived: includeArchived,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to search agents")
+		return
+	}
+
+	// Batch-load skills for all agents to avoid N+1.
+	skillRows, err := h.Queries.ListAgentSkillsByWorkspace(r.Context(), parseUUID(workspaceID))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load agent skills")
+		return
+	}
+	skillMap := map[string][]AgentSkillSummary{}
+	for _, row := range skillRows {
+		agentID := uuidToString(row.AgentID)
+		skillMap[agentID] = append(skillMap[agentID], AgentSkillSummary{
+			ID:          uuidToString(row.ID),
+			Name:        row.Name,
+			Description: row.Description,
+		})
+	}
+
+	ws, err := h.Queries.GetWorkspace(r.Context(), parseUUID(workspaceID))
+	if err != nil {
+		slog.Warn("GetWorkspace failed for redact check", "workspace_id", workspaceID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	alwaysRedact := workspaceAlwaysRedactSecrets(ws.Settings)
+
+	actorType, actorID := h.resolveActor(r, userID, workspaceID)
+	targetsByAgent, ok := h.loadInvocationTargetsByAgent(r.Context(), agents)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "failed to load agent invocation targets")
+		return
+	}
+	visible := make([]AgentResponse, 0, len(agents))
+	for _, a := range agents {
+		targets := targetsByAgent[uuidToString(a.ID)]
+		if actorType == "member" {
+			if !memberAllowedToViewAgent(a, targets, actorID, member.Role) {
+				continue
+			}
+		}
+		resp := agentToResponse(a)
+		applyInvocationTargetsToResponse(&resp, targets)
+		if skills, ok := skillMap[resp.ID]; ok {
+			resp.Skills = skills
+		}
+		if actorType == "agent" || alwaysRedact || !canViewAgentSecrets(a, userID, member.Role) {
+			redactMcpConfig(&resp)
+		}
+		if !h.composioMCPAppsEnabled(r.Context()) {
+			suppressComposioToolkitAllowlist(&resp)
+		} else if actorType == "agent" || uuidToString(a.OwnerID) != userID {
+			redactComposioToolkitAllowlist(&resp)
+		}
+		visible = append(visible, resp)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"agents": visible,
+		"total":  len(visible),
+	})
+}
+
+func escapeLikeWithWildcards(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	s = strings.ReplaceAll(s, `*`, `%`)
+	s = strings.ReplaceAll(s, `?`, `_`)
+	// If the query contains wildcards but doesn't end with a wildcard, append %
+	// so it behaves as an open-ended match.
+	if (strings.Contains(s, "%") || strings.Contains(s, "_")) && !strings.HasSuffix(s, "%") && !strings.HasSuffix(s, "_") {
+		s = s + "%"
+	}
+	return s
 }
 
 func (h *Handler) GetAgent(w http.ResponseWriter, r *http.Request) {
