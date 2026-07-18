@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import { ListTodo } from "lucide-react";
 import type { Issue } from "@multica/core/types";
 import { useIssuesScopeStore } from "@multica/core/issues/stores/issues-scope-store";
-import { useViewStore } from "@multica/core/issues/stores/view-store-context";
+import { useIssueSavedViewsStore, restoreSavedIssueView } from "@multica/core/issues/stores";
+import { useViewStore, useViewStoreApi } from "@multica/core/issues/stores/view-store-context";
+import { useNavigation } from "../../navigation";
 import { PageHeader } from "../../layout/page-header";
 import { useT } from "../../i18n";
 import { IssueSurface } from "../surface/issue-surface";
@@ -16,8 +19,22 @@ function IssuesSurfaceHeader({
   issues: Issue[];
   isRefreshing: boolean;
 }) {
+  const { searchParams } = useNavigation();
+  const setScope = useIssuesScopeStore((s) => s.setScope);
   const dateFilter = useViewStore((s) => s.dateFilter);
   const setDateFilter = useViewStore((s) => s.setDateFilter);
+  const viewStoreApi = useViewStoreApi();
+  const savedViews = useIssueSavedViewsStore((s) => s.views);
+
+  useEffect(() => {
+    const viewId = searchParams.get("view");
+    if (!viewId) return;
+    const saved = savedViews.find((view) => view.id === viewId);
+    if (!saved) return;
+    const restored = restoreSavedIssueView(saved);
+    setScope(restored.scope);
+    viewStoreApi.setState(restored.viewState);
+  }, [savedViews, searchParams, setScope, viewStoreApi]);
 
   return (
     <IssuesHeader

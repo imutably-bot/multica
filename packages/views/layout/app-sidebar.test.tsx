@@ -88,7 +88,7 @@ vi.mock("../auth", () => ({ useLogout: () => vi.fn() }));
 vi.mock("../issues/components/status-icon", () => ({ StatusIcon: () => <span /> }));
 vi.mock("../navigation", () => ({
   AppLink: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
-  useNavigation: () => ({ pathname: navigation.current.pathname, push: vi.fn() }),
+  useNavigation: () => ({ pathname: navigation.current.pathname, searchParams: new URLSearchParams(), push: vi.fn() }),
 }));
 vi.mock("../projects/components/project-icon", () => ({ ProjectIcon: () => <span /> }));
 vi.mock("../workspace/workspace-avatar", () => ({ WorkspaceAvatar: () => <span /> }));
@@ -138,6 +138,13 @@ vi.mock("@multica/core/inbox/queries", () => ({
     new Set(entries.filter((s) => s.count > 0).map((s) => s.workspace_id)),
 }));
 vi.mock("@multica/core/issues/queries", () => ({ issueDetailOptions: () => ({ queryKey: ["issue"] }) }));
+vi.mock("@multica/core/issues/stores", () => ({
+  useIssueSavedViewsStore: Object.assign(
+    (selector?: any) => (selector ? selector({ views: [], saveView: vi.fn(), deleteView: vi.fn() }) : { views: [], saveView: vi.fn(), deleteView: vi.fn() }),
+    { getState: () => ({ views: [], saveView: vi.fn(), deleteView: vi.fn() }) },
+  ),
+  restoreSavedIssueView: (view: any) => ({ scope: view.snapshot?.scope ?? "all", viewState: view.snapshot ?? view }),
+}));
 vi.mock("@multica/core/issues/stores/create-mode-store", () => ({
   useCreateModeStore: { getState: () => ({ lastMode: "agent" }) },
   openCreateIssueWithPreference: vi.fn(),

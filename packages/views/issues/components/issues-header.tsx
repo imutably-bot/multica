@@ -6,6 +6,7 @@ import {
   ArrowUp,
   CalendarDays,
   ChartGantt,
+  BookmarkPlus,
   ChevronDown,
   CircleDot,
   Columns3,
@@ -23,6 +24,15 @@ import {
   Waves,
 } from "lucide-react";
 import { Button } from "@multica/ui/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@multica/ui/components/ui/dialog";
+import { Input } from "@multica/ui/components/ui/input";
 import { Spinner } from "@multica/ui/components/ui/spinner";
 import {
   DropdownMenu,
@@ -73,6 +83,9 @@ import {
   type ViewMode,
 } from "@multica/core/issues/stores/view-store";
 import { useViewStore, useViewStoreApi } from "@multica/core/issues/stores/view-store-context";
+import { useIssueSavedViewsStore } from "@multica/core/issues/stores";
+import { useNavigation } from "../../navigation";
+import { useWorkspacePaths } from "@multica/core/paths";
 import { addDaysDateOnly, dateOnlyToLocalDate, formatDateOnly, toDateOnly, todayDateOnly } from "@multica/core/issues/date";
 import {
   useIssuesScopeStore,
@@ -645,6 +658,78 @@ export function ViewRefreshIndicator({ active }: { active: boolean }) {
   );
 }
 
+function SaveCurrentViewDialog({ disabled }: { disabled?: boolean }) {
+  const navigation = useNavigation();
+  const workspacePaths = useWorkspacePaths();
+  const scope = useIssuesScopeStore((s) => s.scope);
+  const viewStoreApi = useViewStoreApi();
+  const saveView = useIssueSavedViewsStore((s) => s.saveView);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("Custom view");
+  const isIssuesPage = navigation.pathname.endsWith("/issues");
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (nextOpen) setName("Custom view");
+  };
+
+  const handleSave = () => {
+    const view = saveView(name, viewStoreApi.getState(), scope);
+    navigation.push(workspacePaths.issueView(view.id));
+    setOpen(false);
+  };
+
+  if (!isIssuesPage) return null;
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5 text-muted-foreground md:h-7"
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        aria-label="Save view"
+        title="Save view"
+      >
+        <BookmarkPlus className="size-3.5" />
+        <span className="hidden md:inline">Save view</span>
+      </Button>
+
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save issue view</DialogTitle>
+            <DialogDescription>
+              Give this filter set a name. It will appear in the sidebar as a pinned view.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="saved-view-name">
+              View name
+            </label>
+            <Input
+              id="saved-view-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Custom view"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!name.trim()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // IssuesHeader
 // ---------------------------------------------------------------------------
@@ -787,6 +872,7 @@ export function IssueDisplayControls({
   allowGantt?: boolean;
 }) {
   const { t } = useT("issues");
+  const navigation = useNavigation();
   const viewMode = useViewStore((s) => s.viewMode);
   const statusFilters = useViewStore((s) => s.statusFilters);
   const priorityFilters = useViewStore((s) => s.priorityFilters);
@@ -802,7 +888,9 @@ export function IssueDisplayControls({
   const swimlaneGrouping = useViewStore((s) => s.swimlaneGrouping);
   const cardProperties = useViewStore((s) => s.cardProperties);
   const showSubIssues = useViewStore((s) => s.showSubIssues);
-  const act = useViewStoreApi().getState();
+  const viewStoreApi = useViewStoreApi();
+  const act = viewStoreApi.getState();
+  const canSaveView = navigation.pathname.endsWith("/issues");
 
   const counts = useIssueCounts(scopedIssues);
   const showDateFilter = !!onDateFilterChange;
@@ -1107,6 +1195,7 @@ export function IssueDisplayControls({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        <SaveCurrentViewDialog disabled={!canSaveView} />
 
         {/* Display settings */}
         <Popover>
