@@ -69,7 +69,8 @@ export type AgentColumnKey =
   | "lastActive"
   | "runs"
   | "model"
-  | "created";
+  | "created"
+  | "projects";
 
 /** Model and created are opt-in: hidden until the user enables them. Owner
  *  is shown by default (the user wants to see who owns each agent). */

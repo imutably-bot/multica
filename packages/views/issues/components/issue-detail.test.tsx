@@ -10,6 +10,7 @@ import enIssues from "../../locales/en/issues.json";
 const TEST_RESOURCES = { en: { common: enCommon, issues: enIssues } };
 
 const mockViewport = vi.hoisted(() => ({ isMobile: false }));
+const mockWorkspaceAgents = vi.hoisted(() => [] as { id: string; name: string; archived_at?: string | null }[]);
 
 vi.mock("@multica/ui/hooks/use-mobile", () => ({
   useIsMobile: () => mockViewport.isMobile,
@@ -64,7 +65,7 @@ vi.mock("@multica/core/workspace/queries", () => ({
   }),
   agentListOptions: () => ({
     queryKey: ["workspaces", "ws-1", "agents"],
-    queryFn: () => Promise.resolve([]),
+    queryFn: () => Promise.resolve(mockWorkspaceAgents),
   }),
   squadListOptions: () => ({
     queryKey: ["workspaces", "ws-1", "squads"],
@@ -72,6 +73,10 @@ vi.mock("@multica/core/workspace/queries", () => ({
   }),
   assigneeFrequencyOptions: () => ({
     queryKey: ["workspaces", "ws-1", "assignee-frequency"],
+    queryFn: () => Promise.resolve([]),
+  }),
+  projectAgentListOptions: (wsId: string, projectId: string) => ({
+    queryKey: ["workspaces", wsId, "agents", "project", projectId],
     queryFn: () => Promise.resolve([]),
   }),
   workspaceListOptions: () => ({
@@ -515,6 +520,7 @@ describe("IssueDetail (shared)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockViewport.isMobile = false;
+    mockWorkspaceAgents.length = 0;
     // Default: issue loads successfully
     mockApiObj.getIssue.mockResolvedValue(mockIssue);
     // /timeline returns the entries flat in chronological order (oldest first).
@@ -794,6 +800,49 @@ describe("IssueDetail (shared)", () => {
     });
 
     expect(screen.getByText("I can help with this")).toBeInTheDocument();
+  });
+
+  it("opens the shell picker with previous issue agents", async () => {
+    mockWorkspaceAgents.push(
+      { id: "agent-1", name: "Claude Agent", archived_at: null },
+      { id: "agent-2", name: "Helper Agent", archived_at: null },
+      { id: "agent-3", name: "Archived Agent", archived_at: "2026-01-01T00:00:00Z" },
+    );
+    mockApiObj.getIssue.mockResolvedValue({
+      ...mockIssue,
+      assignee_type: "agent",
+      assignee_id: "agent-2",
+    });
+    mockApiObj.listTimeline.mockResolvedValue([
+      ...mockTimeline,
+      {
+        type: "comment",
+        id: "comment-3",
+        actor_type: "agent",
+        actor_id: "agent-3",
+        content: "Old archived agent",
+        parent_id: null,
+        created_at: "2026-01-18T00:00:00Z",
+        updated_at: "2026-01-18T00:00:00Z",
+        comment_type: "comment",
+      },
+    ]);
+
+    renderIssueDetail();
+
+    const shellButton = await screen.findByRole("button", { name: "Open shell as" });
+    fireEvent.click(shellButton);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Claude Agent").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Helper Agent").length).toBeGreaterThan(0);
+      expect(screen.queryByText("Archived Agent")).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("link", { name: /Helper Agent/i })).toHaveAttribute(
+      "href",
+      "/test/issues/issue-1/shell",
+    );
   });
 
   it("reruns the source task from an agent failure comment", async () => {

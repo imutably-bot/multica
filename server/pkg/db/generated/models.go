@@ -691,6 +691,12 @@ type Project struct {
 	Priority    string             `json:"priority"`
 }
 
+type ProjectAgent struct {
+	ProjectID pgtype.UUID        `json:"project_id"`
+	AgentID   pgtype.UUID        `json:"agent_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type ProjectResource struct {
 	ID           pgtype.UUID        `json:"id"`
 	ProjectID    pgtype.UUID        `json:"project_id"`

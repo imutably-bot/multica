@@ -837,11 +837,41 @@ export class ApiClient {
   }
 
   // Agents
-  async listAgents(params?: { workspace_id?: string; include_archived?: boolean }): Promise<Agent[]> {
+  async listAgents(params?: { workspace_id?: string; project_id?: string; include_archived?: boolean }): Promise<Agent[]> {
     const search = new URLSearchParams();
     if (params?.workspace_id) search.set("workspace_id", params.workspace_id);
+    if (params?.project_id) search.set("project_id", params.project_id);
     if (params?.include_archived) search.set("include_archived", "true");
     return this.fetch(`/api/agents?${search}`);
+  }
+
+  async listAgentProjects(agentId: string): Promise<{ projects: Project[]; total: number }> {
+    return this.fetch(`/api/agents/${agentId}/projects`);
+  }
+
+  async setProjectAgents(projectId: string, agentIds: string[]): Promise<void> {
+    await this.fetch(`/api/projects/${projectId}/agents`, {
+      method: "PUT",
+      body: JSON.stringify({ agent_ids: agentIds }),
+    });
+  }
+
+  async addAgentsToProject(projectId: string, agentIds: string[]): Promise<void> {
+    await this.fetch(`/api/projects/${projectId}/agents`, {
+      method: "POST",
+      body: JSON.stringify({ agent_ids: agentIds }),
+    });
+  }
+
+  async removeAgentsFromProject(projectId: string, agentIds: string[]): Promise<void> {
+    await this.fetch(`/api/projects/${projectId}/agents`, {
+      method: "DELETE",
+      body: JSON.stringify({ agent_ids: agentIds }),
+    });
+  }
+
+  async listProjectAgents(projectId: string): Promise<{ agents: Agent[]; total: number }> {
+    return this.fetch(`/api/projects/${projectId}/agents`);
   }
 
   async getAgent(id: string): Promise<Agent> {
@@ -1452,6 +1482,40 @@ export class ApiClient {
     return this.fetch(`/api/issues/${issueId}/active-task`);
   }
 
+  async createIssueShellSession(
+    issueId: string,
+    agentId?: string,
+  ): Promise<{ session_id: string; state: string; work_dir?: string; error?: string }> {
+    const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return this.fetch(`/api/issues/${issueId}/shell/session${qs}`, { method: "POST" });
+  }
+
+  async getIssueShellSession(
+    issueId: string,
+    agentId?: string,
+  ): Promise<{ session_id: string; state: string; work_dir?: string; error?: string }> {
+    const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return this.fetch(`/api/issues/${issueId}/shell/session${qs}`);
+  }
+
+  // Renders (but never runs) the command that would open this issue's
+  // shell session, for copying into a terminal on the machine hosting
+  // the agent's runtime daemon — same-machine only, no SSH. `shell`
+  // selects the target syntax ("posix" | "cmd" | "powershell"); the
+  // server has no reliable signal for the runtime machine's OS, so the
+  // caller (the browser) supplies its best guess.
+  async getIssueShellCommand(
+    issueId: string,
+    agentId?: string,
+    shell?: "posix" | "cmd" | "powershell",
+  ): Promise<{ command: string; work_dir?: string }> {
+    const params = new URLSearchParams();
+    if (agentId) params.set("agent_id", agentId);
+    if (shell) params.set("shell", shell);
+    const qs = params.toString();
+    return this.fetch(`/api/issues/${issueId}/shell/command${qs ? `?${qs}` : ""}`);
+  }
+
   async listTaskMessages(taskId: string): Promise<TaskMessagePayload[]> {
     return this.fetch(`/api/tasks/${taskId}/messages`);
   }
@@ -1558,14 +1622,14 @@ export class ApiClient {
     return this.fetch(`/api/workspaces/${id}`);
   }
 
-  async createWorkspace(data: { name: string; slug: string; description?: string; context?: string }): Promise<Workspace> {
+  async createWorkspace(data: { name: string; slug: string; description?: string; context?: string; init_prompt?: string }): Promise<Workspace> {
     return this.fetch("/api/workspaces", {
       method: "POST",
       body: JSON.stringify(data),
     });
   }
 
-  async updateWorkspace(id: string, data: { name?: string; description?: string; context?: string; settings?: Record<string, unknown>; repos?: WorkspaceRepo[]; issue_prefix?: string; avatar_url?: string }): Promise<Workspace> {
+  async updateWorkspace(id: string, data: { name?: string; description?: string; context?: string; init_prompt?: string; settings?: Record<string, unknown>; repos?: WorkspaceRepo[]; issue_prefix?: string; avatar_url?: string }): Promise<Workspace> {
     return this.fetch(`/api/workspaces/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),

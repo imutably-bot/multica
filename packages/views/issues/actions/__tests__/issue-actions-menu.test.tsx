@@ -56,6 +56,10 @@ vi.mock("@multica/core/workspace/queries", () => ({
     queryKey: ["workspaces", "ws-1", "assignee-frequency"],
     queryFn: () => Promise.resolve([]),
   }),
+  projectAgentListOptions: (wsId: string, projectId: string) => ({
+    queryKey: ["workspaces", wsId, "agents", "project", projectId],
+    queryFn: () => Promise.resolve([]),
+  }),
 }));
 
 vi.mock("@multica/core/workspace/hooks", () => ({
