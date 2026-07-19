@@ -55,6 +55,7 @@ const COLUMN_KEYS: AgentColumnKey[] = [
   "runs",
   "model",
   "created",
+  "projects",
 ];
 
 const SORT_FIELDS: AgentSortField[] = [
@@ -174,6 +175,7 @@ export function AgentListToolbar({
     runs: t(($) => $.columns.runs),
     model: t(($) => $.columns.model),
     created: t(($) => $.columns.created),
+    projects: t(($) => $.columns.projects),
   };
   const sortLabel = SORT_LABELS[sortField];
 

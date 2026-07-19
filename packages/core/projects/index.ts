@@ -19,3 +19,10 @@ export {
   useUpdateProjectResource,
   useDeleteProjectResource,
 } from "./resource-queries";
+export {
+  useSetProjectAgents,
+  useAddProjectAgent,
+  useRemoveProjectAgent,
+  agentProjectsOptions,
+} from "./agents";
+export { projectAgentListOptions } from "../workspace/queries";

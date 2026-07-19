@@ -11,14 +11,16 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
+import { projectListOptions, projectAgentListOptions } from "@multica/core/projects";
 import type {
   Agent,
   AgentRuntime,
   CreateAgentRequest,
   MemberWithUser,
+  Project,
 } from "@multica/core/types";
 import {
   type AgentActivity,
@@ -30,7 +32,6 @@ import {
 } from "@multica/core/agents";
 import {
   useAgentsViewStore,
-  AGENT_DEFAULT_HIDDEN_COLUMNS,
   AGENT_SCOPES,
   type AgentColumnKey,
   type AgentsScope,
@@ -92,7 +93,7 @@ import { useT } from "../../i18n";
 // the documented exception to the single-line management-list rule.
 const GRID_COLS =
   "grid-cols-[0.75rem_minmax(120px,1fr)_var(--agc-status-mobile)_1.75rem_0.75rem] " +
-  "@2xl:grid-cols-[0.75rem_1rem_minmax(200px,1fr)_var(--agc-status-desktop)_var(--agc-owner)_var(--agc-runtime)_var(--agc-lastactive)_var(--agc-runs)_var(--agc-model)_var(--agc-created)_1.75rem_0.75rem]";
+  "@2xl:grid-cols-[0.75rem_1rem_minmax(200px,1fr)_var(--agc-status-desktop)_var(--agc-owner)_var(--agc-runtime)_var(--agc-lastactive)_var(--agc-runs)_var(--agc-model)_var(--agc-created)_var(--agc-projects)_1.75rem_0.75rem]";
 
 // Two-line rows; the virtualizer's fixed-size contract.
 const ROW_HEIGHT = 64;
@@ -109,6 +110,7 @@ const COLUMN_WIDTHS: Record<AgentColumnKey, number> = {
   runs: 88,
   model: 120,
   created: 104,
+  projects: 144,
 };
 
 // Fixed tracks (edges 12+12, checkbox 16, name min 200, kebab 28) plus the
@@ -136,6 +138,7 @@ function columnTrackVars(
     "--agc-runs": width("runs"),
     "--agc-model": width("model"),
     "--agc-created": width("created"),
+    "--agc-projects": width("projects"),
     "--agc-minw": `${minWidth}px`,
   } as React.CSSProperties;
 }
@@ -571,18 +574,26 @@ function AgentListHeader({
       ) : (
         <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
       )}
+      {isColVisible("projects") ? (
+        <ListGridHeaderCell className="hidden @2xl:flex">
+          Projects
+        </ListGridHeaderCell>
+      ) : (
+        <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
+      )}
       <span aria-hidden="true" />
     </ListGridHeader>
   );
 }
 
 function LoadingSkeleton() {
+  const hiddenColumns = useAgentsViewStore((s) => s.hiddenColumns);
+  const isColVisible = (key: AgentColumnKey) => !hiddenColumns.includes(key);
+
   return (
     <ListGrid
       className={GRID_COLS}
-      style={columnTrackVars(
-        (key) => !AGENT_DEFAULT_HIDDEN_COLUMNS.includes(key),
-      )}
+      style={columnTrackVars(isColVisible)}
     >
       <ListGridHeader>
         <span aria-hidden="true" className="hidden @2xl:inline" />
@@ -592,20 +603,55 @@ function LoadingSkeleton() {
         <ListGridHeaderCell>
           <Skeleton className="h-3 w-12" />
         </ListGridHeaderCell>
-        <ListGridHeaderCell className="hidden @2xl:flex">
-          <Skeleton className="h-3 w-14" />
-        </ListGridHeaderCell>
-        <ListGridHeaderCell className="hidden @2xl:flex">
-          <Skeleton className="h-3 w-14" />
-        </ListGridHeaderCell>
-        <ListGridHeaderCell className="hidden @2xl:flex">
-          <Skeleton className="h-3 w-14" />
-        </ListGridHeaderCell>
-        <ListGridHeaderCell className="hidden @2xl:flex">
-          <Skeleton className="h-3 w-10" />
-        </ListGridHeaderCell>
-        <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
-        <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
+        {isColVisible("owner") ? (
+          <ListGridHeaderCell className="hidden @2xl:flex">
+            <Skeleton className="h-3 w-14" />
+          </ListGridHeaderCell>
+        ) : (
+          <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
+        )}
+        {isColVisible("runtime") ? (
+          <ListGridHeaderCell className="hidden @2xl:flex">
+            <Skeleton className="h-3 w-14" />
+          </ListGridHeaderCell>
+        ) : (
+          <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
+        )}
+        {isColVisible("lastActive") ? (
+          <ListGridHeaderCell className="hidden @2xl:flex">
+            <Skeleton className="h-3 w-14" />
+          </ListGridHeaderCell>
+        ) : (
+          <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
+        )}
+        {isColVisible("runs") ? (
+          <ListGridHeaderCell className="hidden @2xl:flex">
+            <Skeleton className="h-3 w-10" />
+          </ListGridHeaderCell>
+        ) : (
+          <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
+        )}
+        {isColVisible("model") ? (
+          <ListGridHeaderCell className="hidden @2xl:flex">
+            <Skeleton className="h-3 w-12" />
+          </ListGridHeaderCell>
+        ) : (
+          <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
+        )}
+        {isColVisible("created") ? (
+          <ListGridHeaderCell className="hidden @2xl:flex">
+            <Skeleton className="h-3 w-12" />
+          </ListGridHeaderCell>
+        ) : (
+          <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
+        )}
+        {isColVisible("projects") ? (
+          <ListGridHeaderCell className="hidden @2xl:flex">
+            <Skeleton className="h-3 w-12" />
+          </ListGridHeaderCell>
+        ) : (
+          <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
+        )}
         <span aria-hidden="true" />
       </ListGridHeader>
       {Array.from({ length: 5 }).map((_, i) => (
@@ -621,21 +667,56 @@ function LoadingSkeleton() {
           <ListGridCell>
             <Skeleton className="h-3 w-16" />
           </ListGridCell>
-          <ListGridCell className="hidden gap-1.5 @2xl:flex">
-            <Skeleton className="size-5 rounded-full" />
-            <Skeleton className="h-3 w-12" />
-          </ListGridCell>
-          <ListGridCell className="hidden @2xl:flex">
-            <Skeleton className="h-3 w-16" />
-          </ListGridCell>
-          <ListGridCell className="hidden @2xl:flex">
-            <Skeleton className="h-3 w-12" />
-          </ListGridCell>
-          <ListGridCell className="hidden justify-end @2xl:flex">
-            <Skeleton className="h-3 w-8" />
-          </ListGridCell>
-          <ListGridCell className="hidden px-0 @2xl:flex" />
-          <ListGridCell className="hidden px-0 @2xl:flex" />
+          {isColVisible("owner") ? (
+            <ListGridCell className="hidden gap-1.5 @2xl:flex">
+              <Skeleton className="size-5 rounded-full" />
+              <Skeleton className="h-3 w-12" />
+            </ListGridCell>
+          ) : (
+            <ListGridCell className="hidden px-0 @2xl:flex" />
+          )}
+          {isColVisible("runtime") ? (
+            <ListGridCell className="hidden @2xl:flex">
+              <Skeleton className="h-3 w-16" />
+            </ListGridCell>
+          ) : (
+            <ListGridCell className="hidden px-0 @2xl:flex" />
+          )}
+          {isColVisible("lastActive") ? (
+            <ListGridCell className="hidden @2xl:flex">
+              <Skeleton className="h-3 w-12" />
+            </ListGridCell>
+          ) : (
+            <ListGridCell className="hidden px-0 @2xl:flex" />
+          )}
+          {isColVisible("runs") ? (
+            <ListGridCell className="hidden justify-end @2xl:flex">
+              <Skeleton className="h-3 w-8" />
+            </ListGridCell>
+          ) : (
+            <ListGridCell className="hidden px-0 @2xl:flex" />
+          )}
+          {isColVisible("model") ? (
+            <ListGridCell className="hidden @2xl:flex">
+              <Skeleton className="h-3 w-12" />
+            </ListGridCell>
+          ) : (
+            <ListGridCell className="hidden px-0 @2xl:flex" />
+          )}
+          {isColVisible("created") ? (
+            <ListGridCell className="hidden @2xl:flex">
+              <Skeleton className="h-3 w-12" />
+            </ListGridCell>
+          ) : (
+            <ListGridCell className="hidden px-0 @2xl:flex" />
+          )}
+          {isColVisible("projects") ? (
+            <ListGridCell className="hidden @2xl:flex">
+              <Skeleton className="h-3 w-16" />
+            </ListGridCell>
+          ) : (
+            <ListGridCell className="hidden px-0 @2xl:flex" />
+          )}
           <span aria-hidden="true" />
         </ListGridRow>
       ))}
@@ -812,6 +893,28 @@ export function AgentsPage(_props: AgentsPageProps = {}) {
   const { data: runCountsRaw = [] } = useQuery(agentRunCounts30dOptions(wsId));
   const { byAgent: presenceMap } = useWorkspacePresenceMap(wsId);
   const { byAgent: activityMap } = useWorkspaceActivityMap(wsId);
+
+  const { data: projects = [] } = useQuery(projectListOptions(wsId));
+  const projectAgentsQueries = useQueries({
+    queries: projects.map((p) => ({
+      ...projectAgentListOptions(wsId, p.id),
+      enabled: !!wsId && !!p.id,
+    })),
+  });
+
+  const agentProjectsMap = useMemo(() => {
+    const map = new Map<string, Project[]>();
+    projects.forEach((project, index) => {
+      const qResult = projectAgentsQueries[index];
+      const assignedAgents = qResult?.data ?? [];
+      assignedAgents.forEach((agent) => {
+        const list = map.get(agent.id) ?? [];
+        list.push(project);
+        map.set(agent.id, list);
+      });
+    });
+    return map;
+  }, [projects, projectAgentsQueries]);
 
   const [showCreate, setShowCreate] = useState(false);
   const [duplicateTemplate, setDuplicateTemplate] = useState<Agent | null>(
@@ -1176,6 +1279,30 @@ export function AgentsPage(_props: AgentsPageProps = {}) {
                           {new Date(
                             row.agent.created_at,
                           ).toLocaleDateString()}
+                        </ListGridCell>
+                      ) : (
+                        <ListGridCell className="hidden px-0 @2xl:flex" />
+                      )}
+                      {isColVisible("projects") ? (
+                        <ListGridCell className="hidden min-w-0 @2xl:flex">
+                          <span className="flex flex-wrap gap-1 min-w-0">
+                            {(() => {
+                              const agentProjects = agentProjectsMap.get(row.agent.id) ?? [];
+                              return agentProjects.length === 0 ? (
+                                <span className="text-muted-foreground/50 text-xs">—</span>
+                              ) : (
+                                agentProjects.map((p) => (
+                                  <span
+                                    key={p.id}
+                                    className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground max-w-full truncate"
+                                    title={p.title}
+                                  >
+                                    {p.title}
+                                  </span>
+                                ))
+                              );
+                            })()}
+                          </span>
                         </ListGridCell>
                       ) : (
                         <ListGridCell className="hidden px-0 @2xl:flex" />

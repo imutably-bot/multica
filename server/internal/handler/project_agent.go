@@ -292,3 +292,38 @@ func parseUUIDOrErr(s string) (pgtype.UUID, error) {
 	}
 	return uuid, nil
 }
+
+// GET /api/agents/{id}/projects
+func (h *Handler) ListAgentProjects(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "id")
+	agentUUID, ok := parseUUIDOrBadRequest(w, agentID, "agent id")
+	if !ok {
+		return
+	}
+
+	// Ensure workspace boundaries are respected
+	workspaceID := h.resolveWorkspaceID(r)
+	wsUUID := parseUUID(workspaceID)
+	_, err := h.Queries.GetAgentInWorkspace(r.Context(), db.GetAgentInWorkspaceParams{
+		ID:          agentUUID,
+		WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "agent not found")
+		return
+	}
+
+	// Fetch projects the agent is assigned to
+	projects, err := h.Queries.ListProjectsForAgent(r.Context(), agentUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list agent projects")
+		return
+	}
+
+	resp := make([]ProjectResponse, len(projects))
+	for i, p := range projects {
+		resp[i] = projectToResponse(p)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"projects": resp, "total": len(resp)})
+}

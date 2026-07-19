@@ -46,6 +46,9 @@ import { RuntimePicker } from "./inspector/runtime-picker";
 import { SkillAttach } from "./inspector/skill-attach";
 import { ThinkingPropRow } from "./inspector/thinking-prop-row";
 import { AccessPicker } from "./inspector/access-picker";
+import { useQuery } from "@tanstack/react-query";
+import { useWorkspaceId } from "@multica/core/hooks";
+import { agentProjectsOptions } from "@multica/core/projects";
 import { LarkAgentBindButton } from "../../settings/components/lark-tab";
 import { SlackAgentBindButton } from "../../settings/components/slack-tab";
 
@@ -103,6 +106,8 @@ export function AgentDetailInspector({
 }: InspectorProps) {
   const { t } = useT("agents");
   const timeAgo = useTimeAgo();
+  const wsId = useWorkspaceId();
+  const { data: projects = [] } = useQuery(agentProjectsOptions(wsId, agent.id));
   const update = (data: Record<string, unknown>) => onUpdate(agent.id, data);
   const isOnline = runtime?.status === "online";
 
@@ -200,6 +205,23 @@ export function AgentDetailInspector({
         <PropRow label={t(($) => $.inspector.prop_updated)} interactive={false}>
           <span className="text-muted-foreground">
             {timeAgo(agent.updated_at)}
+          </span>
+        </PropRow>
+        <PropRow label="Projects" interactive={false}>
+          <span className="flex flex-wrap gap-1 min-w-0 justify-end">
+            {projects.length === 0 ? (
+              <span className="text-muted-foreground">None</span>
+            ) : (
+              projects.map((p) => (
+                <span
+                  key={p.id}
+                  className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground max-w-full truncate"
+                  title={p.title}
+                >
+                  {p.title}
+                </span>
+              ))
+            )}
           </span>
         </PropRow>
       </Section>

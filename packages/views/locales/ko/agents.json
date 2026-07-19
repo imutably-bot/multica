@@ -70,7 +70,8 @@
     "last_active": "최근 활동",
     "model": "모델",
     "created": "생성일",
-    "owner": "소유자"
+    "owner": "소유자",
+    "projects": "프로젝트"
   },
   "row": {
     "you": "나",
@@ -206,6 +207,7 @@
     "activity": "활동",
     "tasks": "작업",
     "instructions": "지침",
+    "prompt_templates": "Prompt Templates",
     "skills": "스킬",
     "environment": "환경",
     "custom_args": "사용자 지정 인자",
