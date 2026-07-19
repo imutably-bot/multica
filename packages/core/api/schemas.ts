@@ -306,6 +306,7 @@ const SearchIssueResultSchema = IssueSchema.extend({
   matched_snippet: z.string().optional(),
   matched_description_snippet: z.string().optional(),
   matched_comment_snippet: z.string().optional(),
+  matched_log_snippet: z.string().optional(),
 }).loose();
 
 export const SearchIssuesResponseSchema = z.object({

@@ -9,6 +9,10 @@
     "archive_all_read": "既読の項目をすべてアーカイブ",
     "archive_completed": "完了した項目をアーカイブ"
   },
+  "search": {
+    "placeholder": "受信箱を検索",
+    "no_results": "一致する通知はありません"
+  },
   "list": {
     "empty": "通知はありません",
     "mark_done_tooltip": "完了にする",

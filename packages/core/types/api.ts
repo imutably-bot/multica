@@ -186,10 +186,12 @@ export interface ListIssuesCache {
 }
 
 export interface SearchIssueResult extends Issue {
-  match_source: "title" | "description" | "comment";
+  match_source: "title" | "description" | "comment" | "log";
   matched_snippet?: string;
   matched_description_snippet?: string;
   matched_comment_snippet?: string;
+  /** Snippet from an agent's execution log (task_message content/output) that matched the query. */
+  matched_log_snippet?: string;
 }
 
 export interface SearchIssuesResponse {
