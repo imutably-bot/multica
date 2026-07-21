@@ -391,10 +391,6 @@ function ProjectSubContent({
       </div>
 
       <div className="max-h-64 overflow-y-auto p-1">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel className="sr-only">
-            {t(($) => $.filters.section_project)}
-          </DropdownMenuLabel>
         {(!query || "no project".includes(query) || "unassigned".includes(query)) && (
           <DropdownMenuCheckboxItem
             checked={includeNoProject}
@@ -409,9 +405,8 @@ function ProjectSubContent({
                 {noProjectCount}
               </span>
             )}
-            </DropdownMenuCheckboxItem>
-          )}
-        </DropdownMenuGroup>
+          </DropdownMenuCheckboxItem>
+        )}
 
         {filtered.map((p) => {
           const checked = selected.includes(p.id);
