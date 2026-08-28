@@ -460,13 +460,19 @@ func TestAntigravityModelError(t *testing.T) {
 	t.Parallel()
 
 	catalog := []Model{
-		{ID: "Gemini 3.5 Flash (Medium)", Label: "Gemini 3.5 Flash (Medium)", Provider: "antigravity"},
-		{ID: "Claude Opus 4.6 (Thinking)", Label: "Claude Opus 4.6 (Thinking)", Provider: "antigravity"},
+		{ID: "gemini-3.5-flash-medium", Label: "Gemini 3.5 Flash (Medium)", Provider: "antigravity"},
+		{ID: "claude-opus-4-6-thinking", Label: "Claude Opus 4.6 (Thinking)", Provider: "antigravity"},
 	}
 
 	// Exact catalog hit → accepted.
 	if err := antigravityModelError("Claude Opus 4.6 (Thinking)", catalog); err != nil {
 		t.Errorf("valid model rejected: %v", err)
+	}
+	if err := antigravityModelError("claude-opus-4-6-thinking", catalog); err != nil {
+		t.Errorf("valid slug rejected: %v", err)
+	}
+	if got := antigravityModelID("Claude Opus 4.6 (Thinking)", catalog); got != "claude-opus-4-6-thinking" {
+		t.Errorf("label resolved to %q, want slug", got)
 	}
 
 	// Empty model → accepted (flag omitted, agy resolves its own default).
