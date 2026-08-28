@@ -1056,11 +1056,11 @@ func acpModelLabel(name, modelID string) string {
 }
 
 // discoverAntigravityModels runs `agy models` and returns the catalog the
-// installed Antigravity CLI advertises (one display name per line).
+// installed Antigravity CLI advertises (one slug and display name per line).
 //
 // Unlike cursor / pi / opencode there is deliberately NO static fallback.
-// agy's `--model` takes the exact human display string (e.g.
-// "Claude Opus 4.6 (Thinking)") and silently no-ops on any value it doesn't
+// agy's `--model` takes the model slug (e.g. "claude-opus-4-6-thinking") and
+// silently no-ops on any value it doesn't
 // recognise — empty output, exit 0 — so a guessed static list would risk
 // offering a model the installed CLI can't honour, turning a typo into a
 // "successful" empty run. On any discovery failure we return an empty
@@ -1087,24 +1087,30 @@ func discoverAntigravityModels(ctx context.Context, executablePath string) ([]Mo
 	return parseAntigravityModels(string(out)), nil
 }
 
-// parseAntigravityModels turns `agy models` output — one model display name
-// per line — into Model entries. The display string IS the value `--model`
-// expects, so ID and Label are identical and the daemon ships opts.Model
-// verbatim. Blank and duplicate lines are skipped.
+// parseAntigravityModels turns `agy models` output into Model entries. Current
+// agy versions emit a slug and human label separated by a tab; older versions
+// emitted only a display string, which remains supported for compatibility.
+// The slug is the value `--model` expects. Blank rows and duplicate IDs are
+// skipped.
 func parseAntigravityModels(output string) []Model {
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var models []Model
 	seen := map[string]bool{}
 	for scanner.Scan() {
-		name := strings.TrimSpace(scanner.Text())
-		if name == "" || seen[name] {
+		parts := strings.SplitN(scanner.Text(), "\t", 2)
+		id := strings.TrimSpace(parts[0])
+		if id == "" || seen[id] {
 			continue
 		}
-		seen[name] = true
+		label := id
+		if len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
+			label = strings.TrimSpace(parts[1])
+		}
+		seen[id] = true
 		models = append(models, Model{
-			ID:       name,
-			Label:    name,
+			ID:       id,
+			Label:    label,
 			Provider: "antigravity",
 		})
 	}

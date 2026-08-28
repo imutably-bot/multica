@@ -456,34 +456,37 @@ func TestAntigravityBackendProviderErrorSurfacesAsFailed(t *testing.T) {
 // validation regardless of whether opts.Model originated from agent.model, a
 // persisted/API value, or the daemon-wide MULTICA_ANTIGRAVITY_MODEL default —
 // they all collapse to opts.Model before Execute runs this check.
-func TestAntigravityModelError(t *testing.T) {
+func TestResolveAntigravityModel(t *testing.T) {
 	t.Parallel()
 
 	catalog := []Model{
-		{ID: "Gemini 3.5 Flash (Medium)", Label: "Gemini 3.5 Flash (Medium)", Provider: "antigravity"},
-		{ID: "Claude Opus 4.6 (Thinking)", Label: "Claude Opus 4.6 (Thinking)", Provider: "antigravity"},
+		{ID: "gemini-3.5-flash-medium", Label: "Gemini 3.5 Flash (Medium)", Provider: "antigravity"},
+		{ID: "claude-opus-4-6-thinking", Label: "Claude Opus 4.6 (Thinking)", Provider: "antigravity"},
 	}
 
-	// Exact catalog hit → accepted.
-	if err := antigravityModelError("Claude Opus 4.6 (Thinking)", catalog); err != nil {
-		t.Errorf("valid model rejected: %v", err)
+	// Slug and stored display label both resolve to agy's slug.
+	for _, model := range []string{"claude-opus-4-6-thinking", "Claude Opus 4.6 (Thinking)"} {
+		got, err := resolveAntigravityModel(model, catalog)
+		if err != nil || got != "claude-opus-4-6-thinking" {
+			t.Errorf("resolveAntigravityModel(%q) = %q, %v", model, got, err)
+		}
 	}
 
 	// Empty model → accepted (flag omitted, agy resolves its own default).
-	if err := antigravityModelError("", catalog); err != nil {
-		t.Errorf("empty model should not error: %v", err)
+	if got, err := resolveAntigravityModel("", catalog); err != nil || got != "" {
+		t.Errorf("empty model = %q, %v", got, err)
 	}
 
 	// Empty / nil catalog → fail open (discovery couldn't produce a list, so we
 	// can't prove the value is bad — let agy decide rather than block the run).
-	if err := antigravityModelError("anything at all", nil); err != nil {
-		t.Errorf("empty catalog should fail open, got: %v", err)
+	if got, err := resolveAntigravityModel("anything at all", nil); err != nil || got != "anything at all" {
+		t.Errorf("empty catalog = %q, %v", got, err)
 	}
 
 	// Unknown model with a known catalog → actionable error that names the
 	// rejected value and points at `agy models`. THIS is the case that stops
 	// the silent empty-success.
-	err := antigravityModelError("Totally Made Up Model", catalog)
+	_, err := resolveAntigravityModel("Totally Made Up Model", catalog)
 	if err == nil {
 		t.Fatal("unknown model should be rejected, not silently accepted")
 	}
@@ -494,12 +497,11 @@ func TestAntigravityModelError(t *testing.T) {
 		t.Errorf("error should point the user at `agy models`: %v", err)
 	}
 
-	// Near-miss (trailing space / dropped suffix) → still rejected, because agy
-	// needs the exact display string and would no-op on anything else.
-	if err := antigravityModelError("Claude Opus 4.6 (Thinking) ", catalog); err == nil {
+	// Near-miss (trailing space / dropped suffix) → still rejected.
+	if _, err := resolveAntigravityModel("Claude Opus 4.6 (Thinking) ", catalog); err == nil {
 		t.Error("near-miss model (trailing space) should be rejected")
 	}
-	if err := antigravityModelError("Claude Opus 4.6", catalog); err == nil {
+	if _, err := resolveAntigravityModel("Claude Opus 4.6", catalog); err == nil {
 		t.Error("near-miss model (dropped suffix) should be rejected")
 	}
 }
