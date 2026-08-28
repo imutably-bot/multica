@@ -973,24 +973,23 @@ func TestAntigravityModelSelectionSupported(t *testing.T) {
 	}
 }
 
-// TestParseAntigravityModels covers the `agy models` line-per-name format:
-// each non-blank line becomes a Model whose ID and Label are the verbatim
-// display string `--model` expects, duplicates collapse, and blanks drop.
+// TestParseAntigravityModels covers both the current `slug<TAB>label` format
+// and the legacy display-only format. IDs are the values passed to --model.
 func TestParseAntigravityModels(t *testing.T) {
 	t.Parallel()
 
 	out := strings.Join([]string{
-		"Gemini 3.5 Flash (Medium)",
-		"Claude Opus 4.6 (Thinking)",
-		"", // blank line — skipped
-		"GPT-OSS 120B (Medium)",
-		"Claude Opus 4.6 (Thinking)", // duplicate — collapsed
+		"gemini-3.5-flash-medium\tGemini 3.5 Flash (Medium)",
+		"claude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)",
+		"",                      // blank line — skipped
+		"GPT-OSS 120B (Medium)", // legacy format
+		"claude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)", // duplicate ID
 	}, "\n")
 
 	got := parseAntigravityModels(out)
 	want := []Model{
-		{ID: "Gemini 3.5 Flash (Medium)", Label: "Gemini 3.5 Flash (Medium)", Provider: "antigravity"},
-		{ID: "Claude Opus 4.6 (Thinking)", Label: "Claude Opus 4.6 (Thinking)", Provider: "antigravity"},
+		{ID: "gemini-3.5-flash-medium", Label: "Gemini 3.5 Flash (Medium)", Provider: "antigravity"},
+		{ID: "claude-opus-4-6-thinking", Label: "Claude Opus 4.6 (Thinking)", Provider: "antigravity"},
 		{ID: "GPT-OSS 120B (Medium)", Label: "GPT-OSS 120B (Medium)", Provider: "antigravity"},
 	}
 	if len(got) != len(want) {
