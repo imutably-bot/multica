@@ -65,6 +65,7 @@ func (b *antigravityBackend) Execute(ctx context.Context, prompt string, opts Ex
 		if err := antigravityModelError(opts.Model, catalog); err != nil {
 			return nil, err
 		}
+		opts.Model = antigravityModelID(opts.Model, catalog)
 	}
 
 	timeout := opts.Timeout
@@ -430,10 +431,9 @@ var antigravityBlockedArgs = map[string]blockedArgMode{
 //	    [--conversation <id>] [--add-dir <cwd>]
 //
 // agy 1.0.6 added a `--model` flag (MUL-3125), so opts.Model is now wired
-// through when set. The value is the exact human display string `agy models`
-// prints (e.g. "Claude Opus 4.6 (Thinking)"), NOT a provider/model slug —
-// it's passed verbatim as a single exec arg, so spaces and parens need no
-// shell quoting. agy still exposes no --system-prompt; runtime instructions
+// through when set. Current agy expects the catalog slug; Execute resolves a
+// saved display label to that slug before reaching this function. agy still
+// exposes no --system-prompt; runtime instructions
 // are delivered via AGENTS.md in the task workdir.
 //
 // agy silently no-ops on a model string it doesn't recognise (empty output,
@@ -474,16 +474,15 @@ func buildAntigravityArgs(prompt, logPath string, timeout time.Duration, opts Ex
 // returns nil otherwise. An empty `available` means discovery couldn't produce
 // a catalog (agy missing, transient failure) — we fail OPEN there and let agy
 // resolve the value, so a discovery hiccup never blocks a run. The match is
-// exact because agy's --model wants the precise display string; a near-miss
-// (extra space, dropped suffix) is correctly rejected since agy would silently
-// no-op on it anyway.
+// exact against either the catalog slug or its display label. This preserves
+// existing saved labels while ensuring newly saved slugs work too.
 func antigravityModelError(model string, available []Model) error {
 	if model == "" || len(available) == 0 {
 		return nil
 	}
 	ids := make([]string, 0, len(available))
 	for _, m := range available {
-		if m.ID == model {
+		if m.ID == model || m.Label == model {
 			return nil
 		}
 		ids = append(ids, m.ID)
@@ -492,6 +491,18 @@ func antigravityModelError(model string, available []Model) error {
 		"antigravity model %q is not available from `agy models`; pick one of: %s",
 		model, strings.Join(ids, ", "),
 	)
+}
+
+// antigravityModelID resolves a saved display label to the slug accepted by
+// current agy. If discovery failed or the value is already a slug, it leaves
+// the caller's value intact; validation handles known-invalid values first.
+func antigravityModelID(model string, available []Model) string {
+	for _, m := range available {
+		if m.ID == model || m.Label == model {
+			return m.ID
+		}
+	}
+	return model
 }
 
 // antigravityNoCapPrintTimeout is the --print-timeout value used when the daemon
