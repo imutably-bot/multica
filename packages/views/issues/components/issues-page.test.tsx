@@ -50,7 +50,7 @@ vi.mock("../../navigation", () => ({
       {children}
     </a>
   ),
-  useNavigation: () => ({ push: vi.fn(), pathname: "/issues" }),
+  useNavigation: () => ({ push: vi.fn(), pathname: "/issues", searchParams: new URLSearchParams() }),
   NavigationProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -169,6 +169,7 @@ const mockViewState = {
   creatorFilters: [] as { type: string; id: string }[],
   projectFilters: [] as string[],
   includeNoProject: false,
+  excludeProjectFilters: [] as string[],
   labelFilters: [] as string[],
   sortBy: "position" as const,
   sortDirection: "asc" as const,
@@ -210,8 +211,10 @@ vi.mock("@multica/core/issues/stores/view-store", () => ({
   SORT_OPTIONS: [
     { value: "position", label: "Manual" },
     { value: "priority", label: "Priority" },
+    { value: "start_date", label: "Start date" },
     { value: "due_date", label: "Due date" },
     { value: "created_at", label: "Created date" },
+    { value: "updated_at", label: "Updated date" },
     { value: "title", label: "Title" },
   ],
   GROUPING_OPTIONS: [
@@ -245,6 +248,13 @@ vi.mock("@multica/core/issues/stores/issues-scope-store", () => ({
     },
     { getState: () => ({ scope: mockScope, setScope: vi.fn() }) },
   ),
+}));
+vi.mock("@multica/core/issues/stores", () => ({
+  useIssueSavedViewsStore: Object.assign(
+    (selector?: any) => (selector ? selector({ views: [], saveView: vi.fn(), deleteView: vi.fn() }) : { views: [], saveView: vi.fn(), deleteView: vi.fn() }),
+    { getState: () => ({ views: [], saveView: vi.fn(), deleteView: vi.fn() }) },
+  ),
+  restoreSavedIssueView: (view: any) => ({ scope: view.snapshot?.scope ?? "all", viewState: view.snapshot ?? view }),
 }));
 
 vi.mock("@multica/core/issues/stores/selection-store", () => ({

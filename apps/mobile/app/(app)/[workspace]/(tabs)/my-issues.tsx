@@ -10,9 +10,10 @@
  * "(0)" headers. Section grouping uses `BOARD_STATUSES` (cancelled excluded)
  * to match web — same source `packages/views/my-issues/components/my-issues-page.tsx:117-125`.
  *
- * Status + Priority filters mirror web's MyIssuesHeader filter sub-menus.
- * Filter state lives in `useMyIssuesViewStore` and is cleared on workspace
- * change via the shared `useClearFiltersOnWorkspaceChange` hook.
+ * Status + Priority + Date filters mirror web's MyIssuesHeader filter
+ * sub-menus. Filter state lives in `useMyIssuesViewStore` and is cleared
+ * on workspace change via the shared `useClearFiltersOnWorkspaceChange`
+ * hook.
  */
 import { useMemo } from "react";
 import { Pressable, SectionList, View } from "react-native";
@@ -35,6 +36,7 @@ import type { MyIssuesScope } from "@/data/queries/issue-keys";
 import { useAuthStore } from "@/data/auth-store";
 import { useWorkspaceStore } from "@/data/workspace-store";
 import { useMyIssuesViewStore } from "@/data/stores/my-issues-view-store";
+import { formatIssueDateFilterLabel } from "@/data/stores/issue-date-filter";
 import { useClearFiltersOnWorkspaceChange } from "@/lib/use-clear-filters-on-workspace-change";
 import {
   BOARD_STATUSES,
@@ -68,6 +70,7 @@ export default function MyIssues() {
   const setScope = useMyIssuesViewStore((s) => s.setScope);
   const statusFilters = useMyIssuesViewStore((s) => s.statusFilters);
   const priorityFilters = useMyIssuesViewStore((s) => s.priorityFilters);
+  const dateFilter = useMyIssuesViewStore((s) => s.dateFilter);
 
   const openFilter = () => {
     if (!wsSlug) return;
@@ -92,11 +95,11 @@ export default function MyIssues() {
     enabled: !!wsId && !!userId,
   });
 
-  // Apply client-side status + priority filter. Mirrors the predicate at
-  // packages/views/issues/utils/filter.ts:30-34 via filterIssues().
+  // Apply client-side status / priority / date filter. Mirrors the
+  // predicate at packages/views/issues/utils/filter.ts via filterIssues().
   const filtered = useMemo(
-    () => filterIssues(data ?? [], statusFilters, priorityFilters),
-    [data, statusFilters, priorityFilters],
+    () => filterIssues(data ?? [], statusFilters, priorityFilters, dateFilter),
+    [data, statusFilters, priorityFilters, dateFilter],
   );
 
   // When statusFilters is non-empty, intersect visible status order with it
@@ -119,7 +122,7 @@ export default function MyIssues() {
   }, [filtered, statusFilters]);
 
   const hasActiveFilters =
-    statusFilters.length > 0 || priorityFilters.length > 0;
+    statusFilters.length > 0 || priorityFilters.length > 0 || !!dateFilter;
 
   const showEmptyState =
     !isLoading && !error && filtered.length === 0;
@@ -138,12 +141,14 @@ export default function MyIssues() {
         <ActiveFilterChips
           statusFilters={statusFilters}
           priorityFilters={priorityFilters}
+          dateFilter={dateFilter}
           onClearStatus={(s) =>
             useMyIssuesViewStore.getState().toggleStatusFilter(s)
           }
           onClearPriority={(p) =>
             useMyIssuesViewStore.getState().togglePriorityFilter(p)
           }
+          onClearDate={() => useMyIssuesViewStore.getState().setDateFilter(null)}
         />
       ) : null}
       {isLoading ? (
@@ -295,13 +300,17 @@ function ScopeToolbar<S extends string>({
 function ActiveFilterChips({
   statusFilters,
   priorityFilters,
+  dateFilter,
   onClearStatus,
   onClearPriority,
+  onClearDate,
 }: {
   statusFilters: IssueStatus[];
   priorityFilters: IssuePriority[];
+  dateFilter: { field: "created_at" | "updated_at"; from: string; to: string } | null;
   onClearStatus: (s: IssueStatus) => void;
   onClearPriority: (p: IssuePriority) => void;
+  onClearDate: () => void;
 }) {
   return (
     <View className="flex-row flex-wrap gap-1.5 px-4 pb-2">
@@ -311,6 +320,13 @@ function ActiveFilterChips({
       {priorityFilters.map((p) => (
         <Chip key={`p-${p}`} label={PRIORITY_LABEL[p]} onClear={() => onClearPriority(p)} />
       ))}
+      {dateFilter ? (
+        <Chip
+          key={`d-${dateFilter.field}-${dateFilter.from}-${dateFilter.to}`}
+          label={formatIssueDateFilterLabel(dateFilter)}
+          onClear={onClearDate}
+        />
+      ) : null}
     </View>
   );
 }
@@ -370,4 +386,3 @@ function emptyMessageForScope(scope: MyIssuesScope): string {
       return "No issues assigned to your agents or squads yet.";
   }
 }
-

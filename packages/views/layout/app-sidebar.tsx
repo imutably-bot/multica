@@ -21,6 +21,7 @@ import {
   ListTodo,
   Bot,
   Monitor,
+  Bookmark,
   ChevronDown,
   ChevronRight,
   Settings,
@@ -33,9 +34,11 @@ import {
   FolderKanban,
   BarChart3,
   X,
+  Trash2,
   Zap,
   Users,
 } from "lucide-react";
+import { Button } from "@multica/ui/components/ui/button";
 import { WorkspaceAvatar } from "../workspace/workspace-avatar";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
@@ -79,6 +82,7 @@ import { pinListOptions } from "@multica/core/pins/queries";
 import { useDeletePin, useReorderPins } from "@multica/core/pins/mutations";
 import { issueDetailOptions } from "@multica/core/issues/queries";
 import { projectDetailOptions } from "@multica/core/projects/queries";
+import { useIssueSavedViewsStore } from "@multica/core/issues/stores";
 import type { PinnedItem } from "@multica/core/types";
 import { useLogout } from "../auth";
 import { ProjectIcon } from "../projects/components/project-icon";
@@ -345,12 +349,13 @@ interface AppSidebarProps {
 
 export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }: AppSidebarProps = {}) {
   const { t } = useT("layout");
-  const { pathname, push } = useNavigation();
+  const { pathname, searchParams, push } = useNavigation();
   const user = useAuthStore((s) => s.user);
   const userId = useAuthStore((s) => s.user?.id);
   const logout = useLogout();
   const workspace = useCurrentWorkspace();
   const p = useWorkspacePaths();
+  const currentPath = searchParams.toString().length > 0 ? `${pathname}?${searchParams.toString()}` : pathname;
   const { data: workspaces = EMPTY_WORKSPACES } = useQuery(workspaceListOptions());
   const { data: myInvitations = EMPTY_INVITATIONS } = useQuery(myInvitationListOptions());
   const workspaceCreationDisabled = useConfigStore((s) => s.workspaceCreationDisabled);
@@ -384,6 +389,8 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
     ...pinListOptions(wsId ?? "", userId ?? ""),
     enabled: !!wsId && !!userId,
   });
+  const savedViews = useIssueSavedViewsStore((s) => s.views);
+  const deleteSavedView = useIssueSavedViewsStore((s) => s.deleteView);
   const deletePin = useDeletePin();
   const reorderPins = useReorderPins();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -710,6 +717,48 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                 </CollapsibleContent>
               </SidebarGroup>
             </Collapsible>
+          )}
+
+          {savedViews.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Saved views</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu className="gap-0.5">
+                  {savedViews.map((view) => {
+                    const href = p.issueView(view.id);
+                    const isActive = currentPath === href;
+                    return (
+                      <SidebarMenuItem key={view.id}>
+                        <div className="group flex items-center gap-1">
+                          <SidebarMenuButton
+                            isActive={isActive}
+                            render={<AppLink href={href} />}
+                            className="min-w-0 flex-1 text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground"
+                          >
+                            <Bookmark />
+                            <span className="min-w-0 truncate">{view.name}</span>
+                          </SidebarMenuButton>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              deleteSavedView(view.id);
+                            }}
+                          >
+                            <Trash2 className="size-3.5" />
+                            <span className="sr-only">Delete saved view</span>
+                          </Button>
+                        </div>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
           )}
 
           <SidebarGroup>

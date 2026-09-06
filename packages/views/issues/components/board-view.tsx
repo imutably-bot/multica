@@ -153,7 +153,8 @@ export function BoardView({
   const { t } = useT("issues");
   const grouping = useViewStore((s) => s.grouping);
   const sortBy = useViewStore((s) => s.sortBy);
-  const sortFieldKey = sortBy === "created_at" ? "created" : sortBy;
+  const sortFieldKey =
+    sortBy === "created_at" ? "created" : sortBy === "updated_at" ? "updated" : sortBy;
   const sortLabel = sortBy !== "position"
     ? t(($) => $.board.ordered_by, { field: t(($) => $.display[`sort_${sortFieldKey}` as keyof typeof $.display]) })
     : null;

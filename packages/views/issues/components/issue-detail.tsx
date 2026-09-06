@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleCheck,
+  Copy,
   Milestone,
   MoreHorizontal,
   PanelRight,
@@ -21,6 +22,7 @@ import {
   PinOff,
   Plus,
   Tag,
+  Terminal,
   Unlink,
   Users,
 } from "lucide-react";
@@ -96,6 +98,234 @@ import {
   rightSidebarPanelMotionProps,
   useAnimatedRightSidebarState,
 } from "../../layout/animated-right-sidebar";
+
+// navigator.clipboard.writeText requires a secure context (HTTPS or
+// localhost) — it's undefined, or its promise rejects, on a plain-HTTP
+// deployment like this workspace's. Fall back to the legacy
+// execCommand("copy") textarea trick, which still works over HTTP.
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (window.isSecureContext && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // fall through to the legacy path below
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  document.body.removeChild(textarea);
+  return copied;
+}
+
+// Best-effort guess at the OS of the machine this command will be
+// pasted into. The server has no reliable signal for the runtime
+// machine's OS (nothing is recorded at daemon registration), so this
+// relies on the browser's own platform — correct for the common
+// single-machine self-hosted setup this Tier A feature targets, where
+// the browser and the runtime daemon are the same box. Windows favors
+// PowerShell since it's the default shell in Windows Terminal on 10/11.
+function detectClientShell(): "posix" | "cmd" | "powershell" {
+  if (typeof navigator === "undefined") return "posix";
+  const uaPlatform = (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform;
+  const platform = uaPlatform ?? navigator.platform ?? navigator.userAgent ?? "";
+  return /win/i.test(platform) ? "powershell" : "posix";
+}
+
+// Copies the command that would open the given agent's issue shell
+// session — same-machine only (see api.getIssueShellCommand) — so the
+// user can paste it into a terminal on the runtime's host instead of
+// using the browser shell.
+async function copyIssueShellCommand(issueId: string, agentId?: string, label?: string) {
+  try {
+    const { command } = await api.getIssueShellCommand(issueId, agentId, detectClientShell());
+    if (!command) {
+      toast.error("No command yet — open the shell once first to start a session.");
+      return;
+    }
+    const copied = await copyTextToClipboard(command);
+    if (!copied) {
+      toast.error("Failed to copy shell command");
+      return;
+    }
+    toast.success(label ? `Copied shell command — ${label}` : "Copied shell command");
+  } catch {
+    toast.error("Failed to copy shell command");
+  }
+}
+
+function CopyShellCommandButton({ issueId, agentId, label }: { issueId: string; agentId?: string; label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
+            aria-label={`Copy shell command — ${label}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void copyIssueShellCommand(issueId, agentId, label);
+            }}
+          >
+            <Copy />
+          </Button>
+        }
+      />
+      {/* eslint-disable-next-line i18next/no-literal-string */}
+      <TooltipContent side="bottom">Copy shell command — {label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ShellAgentPicker({
+  issueId,
+  assigneeId,
+  agents,
+  timeline,
+  shellBasePath,
+}: {
+  issueId: string;
+  assigneeId: string | null;
+  agents: { id: string; name: string; archived_at?: string | null }[];
+  timeline: TimelineEntry[];
+  shellBasePath: string;
+}) {
+  // Build ordered list: assignee first, then unique agents from timeline comments.
+  const agentOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const result: { id: string; name: string }[] = [];
+    const add = (id: string) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const match = agents.find((a) => a.id === id && !a.archived_at);
+      if (match) result.push({ id: match.id, name: match.name });
+    };
+    if (assigneeId) add(assigneeId);
+    for (const entry of timeline) {
+      if (entry.actor_type === "agent") add(entry.actor_id);
+    }
+    return result;
+  }, [assigneeId, agents, timeline]);
+
+  if (agentOptions.length === 0) {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <AppLink href={shellBasePath}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
+                aria-label="Open shell"
+              >
+                <Terminal />
+              </Button>
+            </AppLink>
+          }
+        />
+        <TooltipContent side="bottom">Open shell</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (agentOptions.length === 1) {
+    const only = agentOptions[0]!;
+    const href = only.id === assigneeId
+      ? shellBasePath
+      : `${shellBasePath}?agentId=${encodeURIComponent(only.id)}`;
+    const agentIdParam = only.id === assigneeId ? undefined : only.id;
+    return (
+      <>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <AppLink href={href}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground"
+                  aria-label={`Open shell — ${only.name}`}
+                >
+                  <Terminal />
+                </Button>
+              </AppLink>
+            }
+          />
+          <TooltipContent side="bottom">Open shell — {only.name}</TooltipContent>
+        </Tooltip>
+        <CopyShellCommandButton issueId={issueId} agentId={agentIdParam} label={only.name} />
+      </>
+    );
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
+            aria-label="Open shell as"
+          >
+            <Terminal />
+          </Button>
+        }
+      />
+      <PopoverContent side="bottom" align="end" className="w-52 p-1">
+        <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Open shell as</div>
+        {agentOptions.map((agent) => {
+          const href = agent.id === assigneeId
+            ? shellBasePath
+            : `${shellBasePath}?agentId=${encodeURIComponent(agent.id)}`;
+          const agentIdParam = agent.id === assigneeId ? undefined : agent.id;
+          return (
+            <div key={agent.id} className="flex w-full items-center gap-1 rounded-md hover:bg-accent">
+              <AppLink
+                href={href}
+                className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-sm"
+              >
+                <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="whitespace-normal break-all">{agent.name}</span>
+                {agent.id === assigneeId && (
+                  <span className="ml-auto text-xs text-muted-foreground shrink-0">current</span>
+                )}
+              </AppLink>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground shrink-0"
+                aria-label={`Copy shell command — ${agent.name}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void copyIssueShellCommand(issueId, agentIdParam, agent.name);
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function SubscriberPopoverContent({
   members,
@@ -1864,6 +2094,13 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
               />
               <TooltipContent side="bottom">{actions.isPinned ? t(($) => $.detail.unpin_tooltip) : t(($) => $.detail.pin_tooltip)}</TooltipContent>
             </Tooltip>
+            <ShellAgentPicker
+              issueId={issue.id}
+              assigneeId={issue.assignee_type === "agent" ? issue.assignee_id : null}
+              agents={agents}
+              timeline={timeline}
+              shellBasePath={`${paths.issueDetail(issue.id)}/shell`}
+            />
             <IssueActionsDropdown
               issue={issue}
               align="end"

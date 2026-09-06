@@ -1725,6 +1725,52 @@ func TestCommentCRUD(t *testing.T) {
 	testHandler.DeleteIssue(w, req)
 }
 
+func TestCreateCommentTouchesIssueUpdatedAt(t *testing.T) {
+	w := httptest.NewRecorder()
+	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
+		"title": "Comment touch issue",
+	})
+	testHandler.CreateIssue(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("CreateIssue: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var issue IssueResponse
+	if err := json.NewDecoder(w.Body).Decode(&issue); err != nil {
+		t.Fatalf("decode issue: %v", err)
+	}
+	issueID := issue.ID
+	t.Cleanup(func() {
+		w := httptest.NewRecorder()
+		req := newRequest("DELETE", "/api/issues/"+issueID, nil)
+		req = withURLParam(req, "id", issueID)
+		testHandler.DeleteIssue(w, req)
+	})
+
+	var before time.Time
+	if err := testPool.QueryRow(context.Background(), `SELECT updated_at FROM issue WHERE id = $1`, issueID).Scan(&before); err != nil {
+		t.Fatalf("read issue updated_at before comment: %v", err)
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequest("POST", "/api/issues/"+issueID+"/comments", map[string]any{
+		"content": "Touch board freshness",
+	})
+	req = withURLParam(req, "id", issueID)
+	testHandler.CreateComment(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("CreateComment: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var after time.Time
+	if err := testPool.QueryRow(context.Background(), `SELECT updated_at FROM issue WHERE id = $1`, issueID).Scan(&after); err != nil {
+		t.Fatalf("read issue updated_at after comment: %v", err)
+	}
+	if !after.After(before) {
+		t.Fatalf("issue updated_at did not move after comment: before=%s after=%s", before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
+	}
+}
+
 func TestCommentWritePathsPreserveIssueIdentifiers(t *testing.T) {
 	if testHandler == nil || testPool == nil {
 		t.Skip("requires DB")

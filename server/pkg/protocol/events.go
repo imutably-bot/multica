@@ -118,6 +118,14 @@ const (
 	EventDaemonRegister               = "daemon:register"
 	EventDaemonTaskAvailable          = "daemon:task_available"
 	EventDaemonRuntimeProfilesChanged = "daemon:runtime_profiles_changed"
+	EventDaemonIssueShellOpen         = "daemon:issue_shell_open"
+	EventDaemonIssueShellInput        = "daemon:issue_shell_input"
+	EventDaemonIssueShellResize       = "daemon:issue_shell_resize"
+	EventDaemonIssueShellClose        = "daemon:issue_shell_close"
+	EventDaemonIssueShellReady        = "daemon:issue_shell_ready"
+	EventDaemonIssueShellOutput       = "daemon:issue_shell_output"
+	EventDaemonIssueShellExit         = "daemon:issue_shell_exit"
+	EventDaemonIssueShellError        = "daemon:issue_shell_error"
 
 	// GitHub integration events
 	EventGitHubInstallationCreated = "github_installation:created"

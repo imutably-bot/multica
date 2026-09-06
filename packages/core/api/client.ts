@@ -132,6 +132,7 @@ import type {
   CreateBillingCheckoutSessionResponse,
   BillingCheckoutSessionStatus,
   CreateBillingPortalSessionResponse,
+  PromptTemplateListResponse,
 } from "../types";
 import type { OnboardingCompletionPath } from "../onboarding/types";
 import type { CreateFeedbackResponse, FeedbackKind } from "../feedback/types";
@@ -907,6 +908,10 @@ export class ApiClient {
     });
   }
 
+  async getAgentPromptTemplates(id: string): Promise<PromptTemplateListResponse> {
+    return this.fetch(`/api/agents/${id}/prompt-templates`);
+  }
+
   async archiveAgent(id: string): Promise<Agent> {
     return this.fetch(`/api/agents/${id}/archive`, { method: "POST" });
   }
@@ -1452,6 +1457,40 @@ export class ApiClient {
     return this.fetch(`/api/issues/${issueId}/active-task`);
   }
 
+  async createIssueShellSession(
+    issueId: string,
+    agentId?: string,
+  ): Promise<{ session_id: string; state: string; work_dir?: string; error?: string }> {
+    const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return this.fetch(`/api/issues/${issueId}/shell/session${qs}`, { method: "POST" });
+  }
+
+  async getIssueShellSession(
+    issueId: string,
+    agentId?: string,
+  ): Promise<{ session_id: string; state: string; work_dir?: string; error?: string }> {
+    const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return this.fetch(`/api/issues/${issueId}/shell/session${qs}`);
+  }
+
+  // Renders (but never runs) the command that would open this issue's
+  // shell session, for copying into a terminal on the machine hosting
+  // the agent's runtime daemon — same-machine only, no SSH. `shell`
+  // selects the target syntax ("posix" | "cmd" | "powershell"); the
+  // server has no reliable signal for the runtime machine's OS, so the
+  // caller (the browser) supplies its best guess.
+  async getIssueShellCommand(
+    issueId: string,
+    agentId?: string,
+    shell?: "posix" | "cmd" | "powershell",
+  ): Promise<{ command: string; work_dir?: string }> {
+    const params = new URLSearchParams();
+    if (agentId) params.set("agent_id", agentId);
+    if (shell) params.set("shell", shell);
+    const qs = params.toString();
+    return this.fetch(`/api/issues/${issueId}/shell/command${qs ? `?${qs}` : ""}`);
+  }
+
   async listTaskMessages(taskId: string): Promise<TaskMessagePayload[]> {
     return this.fetch(`/api/tasks/${taskId}/messages`);
   }
@@ -1558,14 +1597,18 @@ export class ApiClient {
     return this.fetch(`/api/workspaces/${id}`);
   }
 
-  async createWorkspace(data: { name: string; slug: string; description?: string; context?: string }): Promise<Workspace> {
+  async getWorkspacePromptTemplates(id: string): Promise<PromptTemplateListResponse> {
+    return this.fetch(`/api/workspaces/${id}/prompt-templates`);
+  }
+
+  async createWorkspace(data: { name: string; slug: string; description?: string; context?: string; init_prompt?: string }): Promise<Workspace> {
     return this.fetch("/api/workspaces", {
       method: "POST",
       body: JSON.stringify(data),
     });
   }
 
-  async updateWorkspace(id: string, data: { name?: string; description?: string; context?: string; settings?: Record<string, unknown>; repos?: WorkspaceRepo[]; issue_prefix?: string; avatar_url?: string }): Promise<Workspace> {
+  async updateWorkspace(id: string, data: { name?: string; description?: string; context?: string; init_prompt?: string; settings?: Record<string, unknown>; repos?: WorkspaceRepo[]; issue_prefix?: string; avatar_url?: string }): Promise<Workspace> {
     return this.fetch(`/api/workspaces/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),

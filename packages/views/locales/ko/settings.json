@@ -31,6 +31,7 @@
       "notifications": "알림",
       "tokens": "API 토큰",
       "general": "일반",
+      "agent_settings": "에이전트 설정",
       "repositories": "저장소",
       "github": "GitHub",
       "integrations": "연동",
@@ -167,6 +168,22 @@
     "toast_delete_failed": "워크스페이스를 삭제하지 못했습니다",
     "confirm_cancel": "취소",
     "confirm_action": "확인"
+  },
+  "agent_settings": {
+    "title": "에이전트 설정",
+    "description": "이 워크스페이스의 모든 에이전트 작업에 주입될 짧은 초기 프롬프트를 설정합니다.",
+    "prompt_label": "초기 프롬프트",
+    "prompt_hint": "짧게 유지하세요. 자세한 지침, 긴 정책, 실행 절차서는 필요할 때 읽는 파일에 두는 것이 좋습니다.",
+    "prompt_footer": "아래 프롬프트는 기본 템플릿입니다. 워크스페이스별로 편집할 수 있으며 새 실행에 주입됩니다.",
+    "supported_variables": "지원되는 변수",
+    "supported_variables_hint": "프롬프트 안에서 이 자리표시자를 사용할 수 있습니다.",
+    "help_title": "사용 방법",
+    "help_short": "각 에이전트가 작업을 시작하기 전에 먼저 읽는 짧은 도입부로 생각하세요.",
+    "help_files": "긴 지침이 필요하면 저장소 파일에 넣고, 작업에 필요할 때만 에이전트가 불러오게 하세요.",
+    "save": "프롬프트 저장",
+    "saving": "저장 중...",
+    "toast_saved": "에이전트 프롬프트를 저장했습니다",
+    "toast_save_failed": "에이전트 프롬프트를 저장하지 못했습니다"
   },
   "delete_workspace_dialog": {
     "title": "워크스페이스 삭제",

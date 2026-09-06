@@ -206,6 +206,7 @@
     "activity": "动态",
     "tasks": "Tasks",
     "instructions": "指令",
+    "prompt_templates": "Prompt Templates",
     "skills": "Skills",
     "environment": "环境变量",
     "custom_args": "自定义参数",

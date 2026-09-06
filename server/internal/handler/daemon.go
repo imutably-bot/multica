@@ -23,6 +23,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/middleware"
+	"github.com/multica-ai/multica/server/internal/prompttmpl"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -178,6 +179,11 @@ type DaemonRegisterRequest struct {
 	DeviceName      string   `json:"device_name"`
 	CLIVersion      string   `json:"cli_version"` // multica CLI version
 	LaunchedBy      string   `json:"launched_by"` // "desktop" when spawned by the Electron app
+	// OS is the daemon machine's runtime.GOOS ("windows", "linux",
+	// "darwin", ...). Empty for daemons older than KHI-542 that haven't
+	// re-registered with this field yet — callers must treat that as
+	// "unknown", not as evidence of a non-Windows machine.
+	OS string `json:"os"`
 	Runtimes        []struct {
 		Name    string `json:"name"`
 		Type    string `json:"type"`
@@ -350,6 +356,7 @@ func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
 			"version":     runtime.Version,
 			"cli_version": req.CLIVersion,
 			"launched_by": req.LaunchedBy,
+			"os":          req.OS,
 		})
 
 		var registered db.AgentRuntime
@@ -542,6 +549,7 @@ func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
 			"version":                            "",
 			"cli_version":                        req.CLIVersion,
 			"launched_by":                        req.LaunchedBy,
+			"os":                                 req.OS,
 			"runtime_profile_registration_error": true,
 			"runtime_profile_failure_reason":     reason,
 			"command_name":                       commandName,
@@ -1916,8 +1924,21 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 	// shared context. Empty string when the owner hasn't set one; the daemon
 	// skips rendering the heading in that case.
 	if ws, err := h.Queries.GetWorkspace(r.Context(), parseUUID(resp.WorkspaceID)); err == nil {
+		resp.WorkspaceName = ws.Name
 		if ws.Context.Valid {
 			resp.WorkspaceContext = ws.Context.String
+		}
+		resp.WorkspaceInitPrompt = prompttmpl.EffectiveTemplates(
+			prompttmpl.ExtractWorkspaceOverridesFromRaw(ws.Settings, ""),
+			nil,
+		)[prompttmpl.WorkspaceInitKey]
+		if resp.Agent != nil {
+			resp.PromptTemplates = effectivePromptTemplates(ws, db.Agent{RuntimeConfig: resp.Agent.RuntimeConfig})
+		} else {
+			resp.PromptTemplates = prompttmpl.EffectiveTemplates(
+				prompttmpl.ExtractWorkspaceOverridesFromRaw(ws.Settings, ""),
+				map[string]string{},
+			)
 		}
 	} else {
 		slog.Warn("task claim: failed to load workspace for context injection",

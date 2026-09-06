@@ -1,28 +1,41 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
   CalendarDays,
   ChartGantt,
+  BookmarkPlus,
   ChevronDown,
   CircleDot,
   Columns3,
   Filter,
   FolderKanban,
   FolderMinus,
+  FolderX,
   List,
   SignalHigh,
   SlidersHorizontal,
   X,
+  SquarePen,
   Tag,
   User,
   UserMinus,
   UserPen,
+  Trash2,
   Waves,
 } from "lucide-react";
 import { Button } from "@multica/ui/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@multica/ui/components/ui/dialog";
+import { Input } from "@multica/ui/components/ui/input";
 import { Spinner } from "@multica/ui/components/ui/spinner";
 import {
   DropdownMenu,
@@ -73,6 +86,9 @@ import {
   type ViewMode,
 } from "@multica/core/issues/stores/view-store";
 import { useViewStore, useViewStoreApi } from "@multica/core/issues/stores/view-store-context";
+import { useIssueSavedViewsStore } from "@multica/core/issues/stores";
+import { useNavigation } from "../../navigation";
+import { useWorkspacePaths } from "@multica/core/paths";
 import { addDaysDateOnly, dateOnlyToLocalDate, formatDateOnly, toDateOnly, todayDateOnly } from "@multica/core/issues/date";
 import {
   useIssuesScopeStore,
@@ -84,6 +100,7 @@ import { useT } from "../../i18n";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../../common/hover-check";
 import { WorkspaceAgentWorkingChip } from "./workspace-agent-working-chip";
+import type { SavedIssueView } from "@multica/core/issues/stores";
 
 type LocalDateRange = {
   from: Date | undefined;
@@ -102,6 +119,7 @@ function getActiveFilterCount(state: {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   dateFilter?: IssueDateFilter | null;
 }) {
@@ -110,7 +128,7 @@ function getActiveFilterCount(state: {
   if (state.priorityFilters.length > 0) count++;
   if (state.assigneeFilters.length > 0 || state.includeNoAssignee) count++;
   if (state.creatorFilters.length > 0) count++;
-  if (state.projectFilters.length > 0 || state.includeNoProject) count++;
+  if (state.projectFilters.length > 0 || state.includeNoProject || state.excludeProjectFilters.length > 0) count++;
   if (state.labelFilters.length > 0) count++;
   if (state.dateFilter) count++;
   return count;
@@ -269,7 +287,7 @@ function ActorSubContent({
                 >
                   <HoverCheck checked={checked} />
                   <ActorAvatar actorType="member" actorId={m.user_id} size={18} />
-                  <span className="truncate">{m.name}</span>
+                  <span className="whitespace-normal break-all">{m.name}</span>
                   {count > 0 && (
                     <span className="ml-auto text-xs text-muted-foreground">
                       {count}
@@ -298,7 +316,7 @@ function ActorSubContent({
                 >
                   <HoverCheck checked={checked} />
                   <ActorAvatar actorType="agent" actorId={a.id} size={18} showStatusDot />
-                  <span className="truncate">{a.name}</span>
+                  <span className="whitespace-normal break-all">{a.name}</span>
                   {count > 0 && (
                     <span className="ml-auto text-xs text-muted-foreground">
                       {count}
@@ -327,7 +345,7 @@ function ActorSubContent({
                 >
                   <HoverCheck checked={checked} />
                   <ActorAvatar actorType="squad" actorId={s.id} size={18} />
-                  <span className="truncate">{s.name}</span>
+                  <span className="whitespace-normal break-all">{s.name}</span>
                   {count > 0 && (
                     <span className="ml-auto text-xs text-muted-foreground">
                       {count}
@@ -356,14 +374,18 @@ function ActorSubContent({
 function ProjectSubContent({
   counts,
   selected,
+  excluded,
   onToggle,
+  onToggleExclude,
   includeNoProject,
   onToggleNoProject,
   noProjectCount,
 }: {
   counts: Map<string, number>;
   selected: string[];
+  excluded: string[];
   onToggle: (projectId: string) => void;
+  onToggleExclude: (projectId: string) => void;
   includeNoProject: boolean;
   onToggleNoProject: () => void;
   noProjectCount: number;
@@ -429,6 +451,34 @@ function ProjectSubContent({
             </DropdownMenuCheckboxItem>
           );
         })}
+
+        <DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+            {t(($) => $.filters.exclude_project)}
+          </DropdownMenuLabel>
+          {filtered.map((p) => {
+            const checked = excluded.includes(p.id);
+            const count = counts.get(p.id) ?? 0;
+            return (
+              <DropdownMenuCheckboxItem
+                key={`exclude-${p.id}`}
+                checked={checked}
+                onCheckedChange={() => onToggleExclude(p.id)}
+                className={FILTER_ITEM_CLASS}
+              >
+                <HoverCheck checked={checked} />
+                <FolderX className="size-3.5 text-muted-foreground" />
+                <span className="truncate">{p.title}</span>
+                {count > 0 && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {count}
+                  </span>
+                )}
+              </DropdownMenuCheckboxItem>
+            );
+          })}
+        </DropdownMenuGroup>
 
         {filtered.length === 0 && search && (
           <div className="px-2 py-3 text-center text-sm text-muted-foreground">
@@ -645,6 +695,178 @@ export function ViewRefreshIndicator({ active }: { active: boolean }) {
   );
 }
 
+function SaveCurrentViewDialog({
+  disabled,
+  triggerLabel = "Save view",
+}: {
+  disabled?: boolean;
+  triggerLabel?: string;
+}) {
+  const navigation = useNavigation();
+  const workspacePaths = useWorkspacePaths();
+  const scope = useIssuesScopeStore((s) => s.scope);
+  const viewStoreApi = useViewStoreApi();
+  const saveView = useIssueSavedViewsStore((s) => s.saveView);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("Custom view");
+  const isIssuesPage = navigation.pathname.endsWith("/issues");
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (nextOpen) setName("Custom view");
+  };
+
+  const handleSave = () => {
+    const view = saveView(name, viewStoreApi.getState(), scope);
+    navigation.push(workspacePaths.issueView(view.id));
+    setOpen(false);
+  };
+
+  if (!isIssuesPage) return null;
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5 text-muted-foreground md:h-7"
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        aria-label={triggerLabel}
+        title={triggerLabel}
+      >
+        <BookmarkPlus className="size-3.5" />
+        <span className="hidden md:inline">{triggerLabel}</span>
+      </Button>
+
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save issue view</DialogTitle>
+            <DialogDescription>
+              Give this filter set a name. It will appear in the sidebar as a pinned view.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="saved-view-name">
+              View name
+            </label>
+            <Input
+              id="saved-view-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Custom view"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!name.trim()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function EditSavedViewDialog({ savedView }: { savedView: SavedIssueView }) {
+  const navigation = useNavigation();
+  const workspacePaths = useWorkspacePaths();
+  const scope = useIssuesScopeStore((s) => s.scope);
+  const viewStoreApi = useViewStoreApi();
+  const saveView = useIssueSavedViewsStore((s) => s.saveView);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(savedView.name);
+
+  useEffect(() => {
+    if (open) {
+      setName(savedView.name);
+    }
+  }, [open, savedView.name]);
+
+  const handleSave = () => {
+    const view = saveView(name, viewStoreApi.getState(), scope, savedView.id);
+    navigation.push(workspacePaths.issueView(view.id));
+    setOpen(false);
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5 text-muted-foreground md:h-7"
+        onClick={() => setOpen(true)}
+        aria-label="Edit saved view"
+        title="Edit saved view"
+      >
+        <SquarePen className="size-3.5" />
+        <span className="hidden md:inline">Edit view</span>
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit issue view</DialogTitle>
+            <DialogDescription>
+              Update the name or filters for this saved view. Changes overwrite the existing view.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="saved-view-edit-name">
+              View name
+            </label>
+            <Input
+              id="saved-view-edit-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Custom view"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!name.trim()}>
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function DeleteSavedViewButton({ savedView }: { savedView: SavedIssueView }) {
+  const navigation = useNavigation();
+  const workspacePaths = useWorkspacePaths();
+  const deleteView = useIssueSavedViewsStore((s) => s.deleteView);
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon-sm"
+      className="size-8 shrink-0 text-muted-foreground md:size-7"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteView(savedView.id);
+        navigation.push(workspacePaths.issues());
+      }}
+      aria-label="Delete saved view"
+      title="Delete saved view"
+    >
+      <Trash2 className="size-3.5" />
+    </Button>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // IssuesHeader
 // ---------------------------------------------------------------------------
@@ -655,12 +877,14 @@ export function IssuesHeader({
   dateFilter = null,
   onDateFilterChange,
   isRefreshing = false,
+  activeSavedView = null,
 }: {
   scopedIssues: Issue[];
   allowGantt?: boolean;
   dateFilter?: IssueDateFilter | null;
   onDateFilterChange?: (filter: IssueDateFilter | null) => void;
   isRefreshing?: boolean;
+  activeSavedView?: SavedIssueView | null;
 }) {
   const { t } = useT("issues");
   const scope = useIssuesScopeStore((s) => s.scope);
@@ -762,6 +986,7 @@ export function IssuesHeader({
             allowGantt={allowGantt}
             dateFilter={dateFilter}
             onDateFilterChange={onDateFilterChange}
+            activeSavedView={activeSavedView}
           />
           <ViewRefreshIndicator active={isRefreshing} />
         </div>
@@ -776,17 +1001,20 @@ export function IssueDisplayControls({
   allowGantt = false,
   dateFilter = null,
   onDateFilterChange,
+  activeSavedView = null,
 }: {
   scopedIssues: Issue[];
   hideViewToggle?: boolean;
   dateFilter?: IssueDateFilter | null;
   onDateFilterChange?: (filter: IssueDateFilter | null) => void;
+  activeSavedView?: SavedIssueView | null;
   // Only Project Detail renders <GanttView>; other surfaces (global /issues,
   // /my-issues, actor panel) ignore viewMode === "gantt" and would silently
   // fall back to List if the option were exposed there. Keep Gantt opt-in.
   allowGantt?: boolean;
 }) {
   const { t } = useT("issues");
+  const navigation = useNavigation();
   const viewMode = useViewStore((s) => s.viewMode);
   const statusFilters = useViewStore((s) => s.statusFilters);
   const priorityFilters = useViewStore((s) => s.priorityFilters);
@@ -795,6 +1023,7 @@ export function IssueDisplayControls({
   const creatorFilters = useViewStore((s) => s.creatorFilters);
   const projectFilters = useViewStore((s) => s.projectFilters);
   const includeNoProject = useViewStore((s) => s.includeNoProject);
+  const excludeProjectFilters = useViewStore((s) => s.excludeProjectFilters);
   const labelFilters = useViewStore((s) => s.labelFilters);
   const sortBy = useViewStore((s) => s.sortBy);
   const sortDirection = useViewStore((s) => s.sortDirection);
@@ -802,7 +1031,10 @@ export function IssueDisplayControls({
   const swimlaneGrouping = useViewStore((s) => s.swimlaneGrouping);
   const cardProperties = useViewStore((s) => s.cardProperties);
   const showSubIssues = useViewStore((s) => s.showSubIssues);
-  const act = useViewStoreApi().getState();
+  const viewStoreApi = useViewStoreApi();
+  const act = viewStoreApi.getState();
+  const canSaveView = navigation.pathname.endsWith("/issues");
+  const canEditSavedView = canSaveView && !!activeSavedView;
 
   const counts = useIssueCounts(scopedIssues);
   const showDateFilter = !!onDateFilterChange;
@@ -815,17 +1047,19 @@ export function IssueDisplayControls({
     creatorFilters,
     projectFilters,
     includeNoProject,
+    excludeProjectFilters,
     labelFilters,
     dateFilter: showDateFilter ? dateFilter : null,
   });
   const hasActiveFilters = activeFilterCount > 0;
 
-  const SORT_LABEL_KEY: Record<typeof SORT_OPTIONS[number]["value"], "sort_manual" | "sort_priority" | "sort_start_date" | "sort_due_date" | "sort_created" | "sort_title"> = {
+  const SORT_LABEL_KEY: Record<typeof SORT_OPTIONS[number]["value"], "sort_manual" | "sort_priority" | "sort_start_date" | "sort_due_date" | "sort_created" | "sort_updated" | "sort_title"> = {
     position: "sort_manual",
     priority: "sort_priority",
     start_date: "sort_start_date",
     due_date: "sort_due_date",
     created_at: "sort_created",
+    updated_at: "sort_updated",
     title: "sort_title",
   };
   const GROUPING_LABEL_KEY: Record<typeof GROUPING_OPTIONS[number]["value"], "group_status" | "group_assignee"> = {
@@ -1049,12 +1283,12 @@ export function IssueDisplayControls({
 
             {/* Project */}
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger openOnHover={false}>
                 <FolderKanban className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_project)}</span>
-                {(projectFilters.length > 0 || includeNoProject) && (
+                {(projectFilters.length > 0 || includeNoProject || excludeProjectFilters.length > 0) && (
                   <span className="text-xs text-primary font-medium">
-                    {projectFilters.length + (includeNoProject ? 1 : 0)}
+                    {projectFilters.length + (includeNoProject ? 1 : 0) + excludeProjectFilters.length}
                   </span>
                 )}
               </DropdownMenuSubTrigger>
@@ -1062,7 +1296,9 @@ export function IssueDisplayControls({
                 <ProjectSubContent
                   counts={counts.project}
                   selected={projectFilters}
+                  excluded={excludeProjectFilters}
                   onToggle={act.toggleProjectFilter}
+                  onToggleExclude={act.toggleExcludeProjectFilter}
                   includeNoProject={includeNoProject}
                   onToggleNoProject={act.toggleNoProject}
                   noProjectCount={counts.noProject}
@@ -1106,6 +1342,16 @@ export function IssueDisplayControls({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        <SaveCurrentViewDialog
+          disabled={!canSaveView}
+          triggerLabel={activeSavedView ? "Save as new" : "Save view"}
+        />
+        {canEditSavedView && activeSavedView && (
+          <div className="flex items-center gap-1">
+            <EditSavedViewDialog savedView={activeSavedView} />
+            <DeleteSavedViewButton savedView={activeSavedView} />
+          </div>
+        )}
 
         {/* Display settings */}
         <Popover>

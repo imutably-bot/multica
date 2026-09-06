@@ -76,6 +76,7 @@ export function useIssueSurfaceData({
   creatorFilters,
   projectFilters,
   includeNoProject,
+  excludeProjectFilters,
   labelFilters,
   agentRunningFilter,
   showSubIssues,
@@ -94,6 +95,7 @@ export function useIssueSurfaceData({
   creatorFilters: IssueFilterState["creatorFilters"];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   agentRunningFilter: boolean;
   showSubIssues: boolean;
@@ -168,6 +170,7 @@ export function useIssueSurfaceData({
       creatorFilters,
       projectFilters,
       includeNoProject,
+      excludeProjectFilters,
       labelFilters,
       workingOnly: agentRunningFilter,
       showSubIssues,
@@ -178,6 +181,7 @@ export function useIssueSurfaceData({
       creatorFilters,
       includeNoAssignee,
       includeNoProject,
+      excludeProjectFilters,
       labelFilters,
       priorityFilters,
       projectFilters,
@@ -218,11 +222,17 @@ export function useIssueSurfaceData({
         showSubIssues,
         agentRunningFilter,
         runningIssueIds: activity.runningIssueIds,
+        projectFilters,
+        includeNoProject,
+        excludeProjectFilters,
       }),
     [
       activity.runningIssueIds,
       agentRunningFilter,
       assigneeGroupsQuery.data?.groups,
+      excludeProjectFilters,
+      includeNoProject,
+      projectFilters,
       showSubIssues,
     ],
   );
@@ -259,6 +269,7 @@ export function useIssueSurfaceData({
       creatorFilters,
       projectFilters,
       includeNoProject,
+      excludeProjectFilters,
       labelFilters,
       agentRunningFilter,
       showSubIssues,
@@ -269,6 +280,7 @@ export function useIssueSurfaceData({
       creatorFilters,
       includeNoAssignee,
       includeNoProject,
+      excludeProjectFilters,
       labelFilters,
       priorityFilters,
       projectFilters,

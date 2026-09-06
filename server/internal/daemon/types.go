@@ -49,16 +49,25 @@ type ConnectedAppData = runtimeapps.ConnectedApp
 // Task represents a claimed task from the server.
 // Agent data (name, skills) is populated by the claim endpoint.
 type Task struct {
-	ID          string `json:"id"`
-	AgentID     string `json:"agent_id"`
-	RuntimeID   string `json:"runtime_id"`
-	IssueID     string `json:"issue_id"`
-	WorkspaceID string `json:"workspace_id"`
+	ID            string `json:"id"`
+	AgentID       string `json:"agent_id"`
+	RuntimeID     string `json:"runtime_id"`
+	IssueID       string `json:"issue_id"`
+	WorkspaceID   string `json:"workspace_id"`
+	WorkspaceName string `json:"workspace_name,omitempty"`
+	// PromptTemplates is the effective prompt-template map after applying the
+	// repo-code defaults, workspace overrides, and agent overrides.
+	PromptTemplates map[string]string `json:"prompt_templates,omitempty"`
 	// WorkspaceContext mirrors workspace.context (the per-workspace system
 	// prompt set in Settings → General). Server populates this on every claim
 	// regardless of task kind so the daemon can inject `## Workspace Context`
 	// into the brief. Empty when the owner hasn't set one.
-	WorkspaceContext         string                `json:"workspace_context,omitempty"`
+	WorkspaceContext string `json:"workspace_context,omitempty"`
+	// WorkspaceInitPrompt mirrors the workspace-level init prompt configured
+	// in Settings → Agent settings. The daemon renders it near the top of the
+	// brief after placeholder substitution so the user can keep the prompt
+	// itself short while loading detailed instructions from files on demand.
+	WorkspaceInitPrompt      string                `json:"workspace_init_prompt,omitempty"`
 	ThreadName               string                `json:"thread_name,omitempty"` // semantic title for provider-native session/thread history
 	Agent                    *AgentData            `json:"agent,omitempty"`
 	ConnectedApps            []ConnectedAppData    `json:"connected_apps,omitempty"` // per-run app capabilities mounted through runtime MCP overlays

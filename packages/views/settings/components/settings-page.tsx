@@ -6,6 +6,7 @@ import {
   SlidersHorizontal,
   Key,
   Settings,
+  Bot,
   Users,
   FolderGit2,
   FlaskConical,
@@ -20,6 +21,7 @@ import { AccountTab } from "./account-tab";
 import { PreferencesTab } from "./preferences-tab";
 import { TokensTab } from "./tokens-tab";
 import { WorkspaceTab } from "./workspace-tab";
+import { AgentSettingsTab } from "./agent-settings-tab";
 import { MembersTab } from "./members-tab";
 import { RepositoriesTab } from "./repositories-tab";
 import { GitHubTab } from "./github-tab";
@@ -38,6 +40,7 @@ const ACCOUNT_TAB_ICONS = {
 
 const WORKSPACE_TAB_KEYS = [
   "general",
+  "agent_settings",
   "repositories",
   "github",
   "integrations",
@@ -46,6 +49,7 @@ const WORKSPACE_TAB_KEYS = [
 ] as const;
 const WORKSPACE_TAB_VALUES = {
   general: "workspace",
+  agent_settings: "agent-settings",
   repositories: "repositories",
   github: "github",
   integrations: "integrations",
@@ -54,6 +58,7 @@ const WORKSPACE_TAB_VALUES = {
 } as const;
 const WORKSPACE_TAB_ICONS = {
   general: Settings,
+  agent_settings: Bot,
   repositories: FolderGit2,
   github: GitHubMark,
   integrations: Plug,
@@ -166,12 +171,13 @@ export function SettingsPage({ extraAccountTabs }: SettingsPageProps = {}) {
 
       {/* Right content */}
       <div className="flex-1 min-w-0 md:overflow-y-auto">
-        <div className="w-full max-w-3xl mx-auto p-4 md:p-6">
+        <div className="w-full max-w-5xl mx-auto p-4 md:p-6">
           <TabsContent value="profile"><AccountTab /></TabsContent>
           <TabsContent value="preferences"><PreferencesTab /></TabsContent>
           <TabsContent value="notifications"><NotificationsTab /></TabsContent>
           <TabsContent value="tokens"><TokensTab /></TabsContent>
           <TabsContent value="workspace"><WorkspaceTab /></TabsContent>
+          <TabsContent value="agent-settings"><AgentSettingsTab /></TabsContent>
           <TabsContent value="repositories"><RepositoriesTab /></TabsContent>
           <TabsContent value="github"><GitHubTab /></TabsContent>
           <TabsContent value="integrations"><IntegrationsTab /></TabsContent>

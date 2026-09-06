@@ -10,6 +10,7 @@ export interface IssueFilters {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   // When `agentRunningFilter` is true, only keep issues whose id is in
   // `runningIssueIds`. The set is derived by the caller from
@@ -32,6 +33,7 @@ export interface IssueFilterState {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  excludeProjectFilters: string[];
   labelFilters: string[];
   workingOnly: boolean;
   /** See IssueFilters.showSubIssues — only an explicit `false` hides. */
@@ -64,9 +66,19 @@ export function applyIssueFilters(
   filters: IssueFilterState,
   context: IssueFilterContext = {},
 ): Issue[] {
-  const { statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters, includeNoProject, labelFilters, workingOnly } = filters;
+  const {
+    statusFilters,
+    priorityFilters,
+    assigneeFilters,
+    includeNoAssignee,
+    creatorFilters,
+    projectFilters,
+    includeNoProject,
+    excludeProjectFilters,
+    labelFilters,
+    workingOnly,
+  } = filters;
   const hasAssigneeFilter = assigneeFilters.length > 0 || includeNoAssignee;
-  const hasProjectFilter = projectFilters.length > 0 || includeNoProject;
   // Empty set passed without `agentRunningFilter` is a no-op. When the
   // filter is on but the set is missing/empty, hide everything — the
   // user opted into "only running" and there is nothing running.
@@ -109,16 +121,7 @@ export function applyIssueFilters(
       return false;
     }
 
-    if (hasProjectFilter) {
-      if (!issue.project_id) {
-        if (!includeNoProject) return false;
-      } else if (projectFilters.length > 0) {
-        if (!projectFilters.includes(issue.project_id)) return false;
-      } else {
-        // Only "No project" is checked → hide issues that have a project
-        return false;
-      }
-    }
+    if (!passesProjectFilter(issue, projectFilters, includeNoProject, excludeProjectFilters)) return false;
 
     if (labelFilters.length > 0) {
       // OR semantics within the filter: keep issues that carry any of the
@@ -143,12 +146,33 @@ export function filterIssues(issues: Issue[], filters: IssueFilters): Issue[] {
       creatorFilters: filters.creatorFilters,
       projectFilters: filters.projectFilters,
       includeNoProject: filters.includeNoProject,
+      excludeProjectFilters: filters.excludeProjectFilters,
       labelFilters: filters.labelFilters,
       workingOnly: filters.agentRunningFilter === true,
       showSubIssues: filters.showSubIssues,
     },
     { runningIssueIds: filters.runningIssueIds },
   );
+}
+
+function passesProjectFilter(
+  issue: Issue,
+  projectFilters: string[],
+  includeNoProject: boolean,
+  excludeProjectFilters: string[],
+) {
+  if (issue.project_id) {
+    if (projectFilters.length > 0 && !projectFilters.includes(issue.project_id)) return false;
+    if (projectFilters.length === 0 && includeNoProject) return false;
+    if (excludeProjectFilters.includes(issue.project_id)) return false;
+    return true;
+  }
+
+  if (projectFilters.length > 0) {
+    return includeNoProject;
+  }
+
+  return true;
 }
 
 /**
@@ -165,11 +189,17 @@ export function filterAssigneeGroups(
     showSubIssues?: boolean;
     agentRunningFilter?: boolean;
     runningIssueIds?: ReadonlySet<string>;
+    projectFilters?: string[];
+    includeNoProject?: boolean;
+    excludeProjectFilters?: string[];
   },
 ): IssueAssigneeGroup[] | undefined {
   const applyRunning = filters.agentRunningFilter === true;
   const hideSubIssues = filters.showSubIssues === false;
-  if (!groups || (!applyRunning && !hideSubIssues)) return groups;
+  const projectFilters = filters.projectFilters ?? [];
+  const includeNoProject = filters.includeNoProject === true;
+  const excludeProjectFilters = filters.excludeProjectFilters ?? [];
+  if (!groups || (!applyRunning && !hideSubIssues && projectFilters.length === 0 && !includeNoProject && excludeProjectFilters.length === 0)) return groups;
 
   const { runningIssueIds } = filters;
   return groups
@@ -178,6 +208,7 @@ export function filterAssigneeGroups(
         if (applyRunning && !(runningIssueIds?.has(issue.id) ?? false))
           return false;
         if (hideSubIssues && issue.parent_issue_id) return false;
+        if (!passesProjectFilter(issue, projectFilters, includeNoProject, excludeProjectFilters)) return false;
         return true;
       });
       return { ...group, issues, total: issues.length };

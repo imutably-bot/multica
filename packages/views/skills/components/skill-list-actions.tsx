@@ -127,7 +127,7 @@ function AgentPickerRow({
         isAgent
         size={22}
       />
-      <span className="min-w-0 flex-1 truncate text-sm">{agent.name}</span>
+      <span className="min-w-0 flex-1 whitespace-normal break-all text-sm">{agent.name}</span>
       {hasAll ? (
         <Check className="size-3.5 shrink-0 text-muted-foreground" />
       ) : owned > 0 ? (

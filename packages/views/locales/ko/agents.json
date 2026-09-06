@@ -206,6 +206,7 @@
     "activity": "활동",
     "tasks": "작업",
     "instructions": "지침",
+    "prompt_templates": "Prompt Templates",
     "skills": "스킬",
     "environment": "환경",
     "custom_args": "사용자 지정 인자",

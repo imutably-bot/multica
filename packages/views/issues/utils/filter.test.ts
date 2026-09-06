@@ -15,6 +15,7 @@ const NO_FILTER: IssueFilters = {
   creatorFilters: [],
   projectFilters: [],
   includeNoProject: false,
+  excludeProjectFilters: [],
   labelFilters: [],
 };
 
@@ -148,6 +149,14 @@ describe("filterIssues", () => {
     expect(result.map((i) => i.id)).toEqual(["3"]);
   });
 
+  it("filters by excluded project", () => {
+    const result = filterIssues(issues, {
+      ...NO_FILTER,
+      excludeProjectFilters: ["p-1"],
+    });
+    expect(result.map((i) => i.id)).toEqual(["2", "3"]);
+  });
+
   it("filters by project + No project combined", () => {
     const result = filterIssues(issues, {
       ...NO_FILTER,
@@ -155,6 +164,15 @@ describe("filterIssues", () => {
       includeNoProject: true,
     });
     expect(result.map((i) => i.id)).toEqual(["2", "3"]);
+  });
+
+  it("filters by project plus excluded project", () => {
+    const result = filterIssues(issues, {
+      ...NO_FILTER,
+      projectFilters: ["p-1", "p-2"],
+      excludeProjectFilters: ["p-2"],
+    });
+    expect(result.map((i) => i.id)).toEqual(["1", "4"]);
   });
 
   it("hides project issues when only 'No project' is selected", () => {

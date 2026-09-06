@@ -176,13 +176,25 @@ func (h *Handler) notifyParentOfChildDone(ctx context.Context, prev, issue db.Is
 		return
 	}
 
-	h.publish(protocol.EventCommentCreated, uuidToString(parent.WorkspaceID), "system", "", map[string]any{
+	updatedAt, err := h.Queries.TouchIssueUpdatedAt(ctx, db.TouchIssueUpdatedAtParams{
+		ID:          parent.ID,
+		WorkspaceID: parent.WorkspaceID,
+	})
+	payload := map[string]any{
 		"comment":             commentToResponse(comment, nil, nil),
 		"issue_title":         parent.Title,
 		"issue_assignee_type": textToPtr(parent.AssigneeType),
 		"issue_assignee_id":   uuidToPtr(parent.AssigneeID),
 		"issue_status":        parent.Status,
-	})
+	}
+	if err != nil {
+		slog.Warn("child done: touch parent issue after comment failed",
+			"error", err,
+			"parent_id", uuidToString(parent.ID))
+	} else {
+		payload["issue_updated_at"] = timestampToString(updatedAt)
+	}
+	h.publish(protocol.EventCommentCreated, uuidToString(parent.WorkspaceID), "system", "", payload)
 
 	// Dispatch the explicit trigger / inbox row for the parent assignee.
 	// Listener-level mention parsing is intentionally NOT involved (the
