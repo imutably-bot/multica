@@ -20,6 +20,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/analytics"
 	"github.com/multica-ai/multica/server/internal/auth"
 	"github.com/multica-ai/multica/server/internal/daemonws"
+	"github.com/multica-ai/multica/server/internal/featureflags"
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/middleware"
@@ -1339,6 +1340,37 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 				mcpConfig = merged
 			}
 		}
+
+		// KHI-972 P2: resolve ${secret:NAME} references in the merged
+		// mcp_config and in custom_env. Gated solely by secrets_store —
+		// deliberately independent of composioMCPEnabled, so a reference
+		// resolves whether or not Composio MCP is on — and placed right
+		// after the MCP merge above so a reference can target a server
+		// the overlay just introduced. Unlike the overlay merge, a
+		// resolution failure does NOT fall back silently: a missing or
+		// undecryptable secret must never let the literal ${secret:NAME}
+		// text (or any other unresolved config) reach the daemon, so the
+		// already-claimed task is failed outright and this claim response
+		// reports no task for this round.
+		if h.Secrets != nil && featureflags.SecretsStoreEnabled(r.Context(), h.FeatureFlags) {
+			resolvedMcpConfig, mcpErr := h.Secrets.ResolveJSON(r.Context(), h.Queries, runtime.WorkspaceID, mcpConfig)
+			if mcpErr != nil {
+				h.failClaimedTaskForSecretError(r.Context(), task, mcpErr)
+				outcome = "error_secret_resolution"
+				payloadBytes, _ = writeMeasuredJSON(w, http.StatusOK, map[string]any{"task": nil})
+				return
+			}
+			mcpConfig = resolvedMcpConfig
+
+			resolvedCustomEnv, envErr := h.Secrets.ResolveStringMap(r.Context(), h.Queries, runtime.WorkspaceID, customEnv)
+			if envErr != nil {
+				h.failClaimedTaskForSecretError(r.Context(), task, envErr)
+				outcome = "error_secret_resolution"
+				payloadBytes, _ = writeMeasuredJSON(w, http.StatusOK, map[string]any{"task": nil})
+				return
+			}
+			customEnv = resolvedCustomEnv
+		}
 		// runtime_config is stored as JSONB and may legitimately be the
 		// empty object `{}` for agents that haven't opted into any
 		// provider-specific tuning. Forward only non-empty payloads so the
@@ -1987,6 +2019,22 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	payloadBytes, _ = writeMeasuredJSON(w, http.StatusOK, map[string]any{"task": resp})
+}
+
+// failClaimedTaskForSecretError marks an already-claimed task failed when
+// KHI-972 P2 ${secret:NAME} resolution cannot proceed. err comes from
+// secrets.Resolver, whose error messages carry only the referenced
+// secret's NAME — never a ciphertext or plaintext byte — so it is safe to
+// use directly as the task's stored error. redact.Text is still applied
+// as defense-in-depth (matches FailTask's own redaction of the issue
+// comment it may post) in case a workspace ever names a secret something
+// that happens to match a redaction pattern.
+func (h *Handler) failClaimedTaskForSecretError(ctx context.Context, task *db.AgentTaskQueue, err error) {
+	msg := redact.Text(fmt.Sprintf("secret resolution failed: %s", err.Error()))
+	if _, failErr := h.TaskService.FailTask(ctx, task.ID, msg, "", "", "secret_resolution_failed"); failErr != nil {
+		slog.Error("daemon claim: failed to fail task after secret resolution error",
+			"task_id", uuidToString(task.ID), "error", failErr)
+	}
 }
 
 type resolveSkillBundlesRequest struct {

@@ -71,6 +71,7 @@ func init() {
 	rootCmd.AddCommand(issueCmd)
 	rootCmd.AddCommand(projectCmd)
 	rootCmd.AddCommand(labelCmd)
+	rootCmd.AddCommand(secretCmd)
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(autopilotCmd)
 	rootCmd.AddCommand(workspaceCmd)

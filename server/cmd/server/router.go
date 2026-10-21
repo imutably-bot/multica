@@ -33,6 +33,7 @@ import (
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/middleware"
 	"github.com/multica-ai/multica/server/internal/realtime"
+	"github.com/multica-ai/multica/server/internal/secrets"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/storage"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -568,6 +569,19 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		slog.Info("composio integration disabled (COMPOSIO_API_KEY not set)")
 	}
 
+	// KHI-972 P2: encrypted workspace secret store. Construction is gated
+	// solely on MULTICA_SECRETS_KEY (32 bytes, base64) being present and
+	// valid — independent of the secrets_store feature flag, which instead
+	// gates whether the API/CLI/claim-time resolution actually do
+	// anything. A misconfigured or absent key must disable the feature
+	// with a clear log line, never fall back to an implicit key.
+	if kp, err := secrets.NewEnvKeyProvider("MULTICA_SECRETS_KEY"); err != nil {
+		slog.Info("secrets store disabled (MULTICA_SECRETS_KEY not set or invalid)", "error", err)
+	} else {
+		h.Secrets = secrets.NewService(kp)
+		slog.Info("secrets store enabled")
+	}
+
 	if opts.HeartbeatScheduler != nil {
 		h.HeartbeatScheduler = opts.HeartbeatScheduler
 	}
@@ -1020,6 +1034,17 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Put("/", h.UpdateLabel)
 					r.Delete("/", h.DeleteLabel)
 				})
+			})
+
+			// Secrets (KHI-972 P2). Owners/admins only, enforced per-handler by
+			// authorizeSecretsAccess — not by a route-level role middleware —
+			// because the check also depends on h.Secrets being configured and
+			// the secrets_store feature flag, both of which vary per request.
+			r.Route("/api/secrets", func(r chi.Router) {
+				r.Get("/", h.ListSecrets)
+				r.Post("/", h.CreateSecret)
+				r.Post("/{name}/rotate", h.RotateSecret)
+				r.Delete("/{name}", h.DeleteSecret)
 			})
 
 			// Projects

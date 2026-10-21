@@ -955,3 +955,19 @@ type WorkspaceInvitation struct {
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 }
+
+// KHI-972 P2: encrypted secret values referenced as ${secret:NAME}, resolved at task claim time. value_encrypted is an envelope, never plaintext.
+type WorkspaceSecret struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Name        string      `json:"name"`
+	// Envelope: a random per-secret AES-256-GCM data key wrapped by the key_version master/KMS key, plus the value sealed under that data key. Never returned by any API.
+	ValueEncrypted []byte `json:"value_encrypted"`
+	// Identifies which wrapping key produced this envelope (see secrets.KeyProvider.KeyVersion). Lets a future key rotation decrypt old rows with the old key while new writes use the new one.
+	KeyVersion  int32              `json:"key_version"`
+	Description pgtype.Text        `json:"description"`
+	CreatedBy   pgtype.UUID        `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	RotatedAt   pgtype.Timestamptz `json:"rotated_at"`
+}
