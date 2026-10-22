@@ -21,3 +21,25 @@ var RefPattern = regexp.MustCompile(`\$\{secret:(` + nameCharset + `)\}`)
 func ValidName(name string) bool {
 	return NamePattern.MatchString(name)
 }
+
+// ContainsReference reports whether raw (JSON bytes, or any other string
+// content) contains at least one ${secret:NAME} occurrence. Used in two
+// places that both need a cheap yes/no check without caring which names
+// are referenced: the save-time stopgap in agent.go/agent_env.go (reject
+// a non-owner/admin caller writing a reference at all) and the claim-time
+// fail-closed guard in daemon.go (a reference present while resolution is
+// unavailable must fail the task, never pass the literal text through).
+func ContainsReference(raw []byte) bool {
+	return RefPattern.Match(raw)
+}
+
+// StringMapContainsReference is the map[string]string (custom_env) twin of
+// ContainsReference.
+func StringMapContainsReference(m map[string]string) bool {
+	for _, v := range m {
+		if RefPattern.MatchString(v) {
+			return true
+		}
+	}
+	return false
+}

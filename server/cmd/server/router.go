@@ -1161,6 +1161,13 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// internal/handler/agent_env.go.
 					r.Get("/env", h.GetAgentEnv)
 					r.Put("/env", h.UpdateAgentEnv)
+					// Per-agent secret grants (KHI-972 P2 review fix,
+					// finding 1). Owner/admin only, agent actors denied,
+					// every grant/revoke audited — same contract as
+					// /api/secrets itself (authorizeAgentSecretGrantAccess).
+					r.Get("/secrets", h.ListAgentSecretGrants)
+					r.Post("/secrets", h.GrantAgentSecret)
+					r.Delete("/secrets/{name}", h.RevokeAgentSecret)
 				})
 			})
 

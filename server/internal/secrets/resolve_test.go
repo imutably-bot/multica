@@ -31,6 +31,16 @@ func createTestSecret(t *testing.T, ctx context.Context, enc *Encryptor, name, v
 	})
 }
 
+// allowSet builds a Resolver "allowed" grant set from a literal name
+// list — the test-side equivalent of GetGrantedSecretNamesForAgent.
+func allowSet(names ...string) map[string]struct{} {
+	out := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		out[n] = struct{}{}
+	}
+	return out
+}
+
 // TestResolveJSON_NestedURLHeadersEnv covers KHI-972 P2 test item
 // "resolution in nested JSON (url, headers, env)": a reference buried
 // three levels deep under mcpServers.<name>.{url,headers,env} must be
@@ -55,7 +65,7 @@ func TestResolveJSON_NestedURLHeadersEnv(t *testing.T) {
 		}
 	}`)
 
-	resolved, err := resolver.ResolveJSON(ctx, testQueries, testWorkspaceID, raw)
+	resolved, err := resolver.ResolveJSON(ctx, testQueries, testWorkspaceID, allowSet("OBOT_TOKEN", "DB_PASSWORD"), raw)
 	if err != nil {
 		t.Fatalf("ResolveJSON: %v", err)
 	}
@@ -96,14 +106,16 @@ func TestResolveJSON_NestedURLHeadersEnv(t *testing.T) {
 }
 
 // TestResolveJSON_NoReferences_ReturnsInputUnchanged ensures configs with
-// no ${secret:...} text are passed through byte-for-byte with no lookups.
+// no ${secret:...} text are passed through byte-for-byte with no lookups
+// — in particular with a nil/empty allowed set, which must still be a
+// no-op when there is nothing to resolve.
 func TestResolveJSON_NoReferences_ReturnsInputUnchanged(t *testing.T) {
 	ctx := context.Background()
 	enc := testEncryptor(t, "SECRETS_TEST_KEY_RESOLVE_NOOP")
 	resolver := NewResolver(enc)
 
 	raw := json.RawMessage(`{"mcpServers":{"plain":{"url":"https://example.com","port":443}}}`)
-	resolved, err := resolver.ResolveJSON(ctx, testQueries, testWorkspaceID, raw)
+	resolved, err := resolver.ResolveJSON(ctx, testQueries, testWorkspaceID, nil, raw)
 	if err != nil {
 		t.Fatalf("ResolveJSON: %v", err)
 	}
@@ -121,8 +133,40 @@ func TestResolveJSON_MissingSecretFails(t *testing.T) {
 	resolver := NewResolver(enc)
 
 	raw := json.RawMessage(`{"mcpServers":{"x":{"url":"${secret:DOES_NOT_EXIST}"}}}`)
-	if _, err := resolver.ResolveJSON(ctx, testQueries, testWorkspaceID, raw); err == nil {
+	if _, err := resolver.ResolveJSON(ctx, testQueries, testWorkspaceID, allowSet("DOES_NOT_EXIST"), raw); err == nil {
 		t.Fatalf("expected an error for a missing secret reference")
+	}
+}
+
+// TestResolveJSON_UngrantedSecretFails is the KHI-972 P2 review finding 1
+// regression test: a secret that exists and decrypts fine, but was never
+// granted to the claiming agent, must fail the same way a missing secret
+// does — and critically, lookup must never even reach the database (the
+// grant check runs first), so an ungranted name can't be used to probe
+// whether a secret with that name exists in the workspace.
+func TestResolveJSON_UngrantedSecretFails(t *testing.T) {
+	ctx := context.Background()
+	enc := testEncryptor(t, "SECRETS_TEST_KEY_RESOLVE_UNGRANTED")
+	createTestSecret(t, ctx, enc, "ADMIN_ONLY_SECRET", "admin-plaintext-value")
+
+	resolver := NewResolver(enc)
+	raw := json.RawMessage(`{"mcpServers":{"x":{"url":"${secret:ADMIN_ONLY_SECRET}"}}}`)
+
+	// No allowed set at all (nil) — the zero-value default for an agent
+	// with no grants.
+	_, err := resolver.ResolveJSON(ctx, testQueries, testWorkspaceID, nil, raw)
+	if err == nil {
+		t.Fatalf("expected an error for an ungranted secret reference")
+	}
+	if strings.Contains(err.Error(), "admin-plaintext-value") {
+		t.Fatalf("error leaks the plaintext: %v", err)
+	}
+
+	// An allowed set that grants a DIFFERENT secret must not let this one
+	// through either.
+	_, err = resolver.ResolveJSON(ctx, testQueries, testWorkspaceID, allowSet("SOME_OTHER_SECRET"), raw)
+	if err == nil {
+		t.Fatalf("expected an error: allowed set does not include the referenced secret")
 	}
 }
 
@@ -138,7 +182,7 @@ func TestResolveJSON_UndecryptableSecretFails(t *testing.T) {
 
 	resolver := NewResolver(readerEnc)
 	raw := json.RawMessage(`{"mcpServers":{"x":{"url":"${secret:STALE_KEY_SECRET}"}}}`)
-	_, err := resolver.ResolveJSON(ctx, testQueries, testWorkspaceID, raw)
+	_, err := resolver.ResolveJSON(ctx, testQueries, testWorkspaceID, allowSet("STALE_KEY_SECRET"), raw)
 	if err == nil {
 		t.Fatalf("expected an error when the stored envelope can't be decrypted under the current key")
 	}
@@ -155,7 +199,7 @@ func TestResolveStringMap_CustomEnv(t *testing.T) {
 	createTestSecret(t, ctx, enc, "API_KEY", "api-key-value")
 
 	resolver := NewResolver(enc)
-	resolved, err := resolver.ResolveStringMap(ctx, testQueries, testWorkspaceID, map[string]string{
+	resolved, err := resolver.ResolveStringMap(ctx, testQueries, testWorkspaceID, allowSet("API_KEY"), map[string]string{
 		"FOO_API_KEY": "${secret:API_KEY}",
 		"PLAIN":       "unchanged",
 	})
@@ -177,9 +221,28 @@ func TestResolveStringMap_MissingSecretFails(t *testing.T) {
 	enc := testEncryptor(t, "SECRETS_TEST_KEY_RESOLVE_CUSTOM_ENV_MISSING")
 	resolver := NewResolver(enc)
 
-	if _, err := resolver.ResolveStringMap(ctx, testQueries, testWorkspaceID, map[string]string{
+	if _, err := resolver.ResolveStringMap(ctx, testQueries, testWorkspaceID, allowSet("NOPE"), map[string]string{
 		"X": "${secret:NOPE}",
 	}); err == nil {
 		t.Fatalf("expected an error for a missing secret reference in custom_env")
+	}
+}
+
+// TestResolveStringMap_UngrantedSecretFails is the custom_env twin of
+// TestResolveJSON_UngrantedSecretFails.
+func TestResolveStringMap_UngrantedSecretFails(t *testing.T) {
+	ctx := context.Background()
+	enc := testEncryptor(t, "SECRETS_TEST_KEY_RESOLVE_CUSTOM_ENV_UNGRANTED")
+	createTestSecret(t, ctx, enc, "ADMIN_ONLY_ENV_SECRET", "admin-env-plaintext")
+
+	resolver := NewResolver(enc)
+	_, err := resolver.ResolveStringMap(ctx, testQueries, testWorkspaceID, nil, map[string]string{
+		"X": "${secret:ADMIN_ONLY_ENV_SECRET}",
+	})
+	if err == nil {
+		t.Fatalf("expected an error for an ungranted secret reference in custom_env")
+	}
+	if strings.Contains(err.Error(), "admin-env-plaintext") {
+		t.Fatalf("error leaks the plaintext: %v", err)
 	}
 }

@@ -34,15 +34,21 @@ func NewResolver(enc *Encryptor) *Resolver {
 // contains no references at all (including when raw is empty), so a task
 // with no secret refs pays zero extra DB round-trips.
 //
+// allowed is the claiming agent's grant set (names it is permitted to
+// resolve — see agent_secret / GetGrantedSecretNamesForAgent). A nil or
+// empty allowed set denies every reference; this is deliberate so a
+// caller can never accidentally pass "no restriction" by leaving the
+// parameter unset.
+//
 // Numbers are decoded with json.Number (not float64) and written back
 // byte-for-byte, so a port number or timeout value in the original config
 // is never reformatted.
 //
-// Fails closed: if ANY referenced secret is missing or cannot be
-// decrypted, this returns an error and NOT the original JSON — a
-// resolution failure must never let the literal ${secret:NAME} text (or
-// any other partially-resolved config) reach the daemon.
-func (r *Resolver) ResolveJSON(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, raw json.RawMessage) (json.RawMessage, error) {
+// Fails closed: if ANY referenced secret is ungranted, missing, or
+// cannot be decrypted, this returns an error and NOT the original JSON —
+// a resolution failure must never let the literal ${secret:NAME} text
+// (or any other partially-resolved config) reach the daemon.
+func (r *Resolver) ResolveJSON(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, allowed map[string]struct{}, raw json.RawMessage) (json.RawMessage, error) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return raw, nil
 	}
@@ -60,7 +66,7 @@ func (r *Resolver) ResolveJSON(ctx context.Context, q *db.Queries, workspaceID p
 		return raw, nil
 	}
 
-	cache, err := r.resolveAll(ctx, q, workspaceID, names)
+	cache, err := r.resolveAll(ctx, q, workspaceID, allowed, names)
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +79,9 @@ func (r *Resolver) ResolveJSON(ctx context.Context, q *db.Queries, workspaceID p
 }
 
 // ResolveStringMap applies the same reference substitution to a flat
-// string map (custom_env). Same fail-closed contract as ResolveJSON.
-func (r *Resolver) ResolveStringMap(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, m map[string]string) (map[string]string, error) {
+// string map (custom_env). Same fail-closed contract and allowed
+// semantics as ResolveJSON.
+func (r *Resolver) ResolveStringMap(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, allowed map[string]struct{}, m map[string]string) (map[string]string, error) {
 	if len(m) == 0 {
 		return m, nil
 	}
@@ -89,7 +96,7 @@ func (r *Resolver) ResolveStringMap(ctx context.Context, q *db.Queries, workspac
 		return m, nil
 	}
 
-	cache, err := r.resolveAll(ctx, q, workspaceID, names)
+	cache, err := r.resolveAll(ctx, q, workspaceID, allowed, names)
 	if err != nil {
 		return nil, err
 	}
@@ -105,10 +112,10 @@ func (r *Resolver) ResolveStringMap(ctx context.Context, q *db.Queries, workspac
 // the first failure (rather than collecting every missing name) keeps the
 // resulting task error simple; the set is small in practice (one task's
 // MCP config plus custom_env).
-func (r *Resolver) resolveAll(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, names map[string]struct{}) (map[string]string, error) {
+func (r *Resolver) resolveAll(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, allowed map[string]struct{}, names map[string]struct{}) (map[string]string, error) {
 	cache := make(map[string]string, len(names))
 	for name := range names {
-		value, err := r.lookup(ctx, q, workspaceID, name)
+		value, err := r.lookup(ctx, q, workspaceID, allowed, name)
 		if err != nil {
 			return nil, err
 		}
@@ -117,10 +124,15 @@ func (r *Resolver) resolveAll(ctx context.Context, q *db.Queries, workspaceID pg
 	return cache, nil
 }
 
-// lookup resolves and decrypts a single secret by name. Every error
-// message carries only the secret's NAME (not sensitive) — never the
-// ciphertext, the plaintext, or low-level crypto diagnostics.
-func (r *Resolver) lookup(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, name string) (string, error) {
+// lookup resolves and decrypts a single secret by name, after checking it
+// against the agent's grant set FIRST — an ungranted name never even
+// reaches the database, let alone gets decrypted. Every error message
+// carries only the secret's NAME (not sensitive) — never the ciphertext,
+// the plaintext, or low-level crypto diagnostics.
+func (r *Resolver) lookup(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, allowed map[string]struct{}, name string) (string, error) {
+	if _, ok := allowed[name]; !ok {
+		return "", fmt.Errorf("secret %q: not granted to this agent", name)
+	}
 	row, err := q.GetWorkspaceSecretByName(ctx, db.GetWorkspaceSecretByNameParams{WorkspaceID: workspaceID, Name: name})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

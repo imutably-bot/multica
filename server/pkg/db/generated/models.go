@@ -79,6 +79,15 @@ type AgentRuntime struct {
 	ProfileID      pgtype.UUID        `json:"profile_id"`
 }
 
+// KHI-972 P2 review fix: per-agent grant allow-list for workspace_secret. The claim-time resolver only decrypts a ${secret:NAME} reference for an agent when a row exists here; an ungranted reference fails the task closed.
+type AgentSecret struct {
+	ID        pgtype.UUID        `json:"id"`
+	AgentID   pgtype.UUID        `json:"agent_id"`
+	SecretID  pgtype.UUID        `json:"secret_id"`
+	CreatedBy pgtype.UUID        `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type AgentSkill struct {
 	AgentID   pgtype.UUID        `json:"agent_id"`
 	SkillID   pgtype.UUID        `json:"skill_id"`

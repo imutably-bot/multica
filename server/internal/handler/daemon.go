@@ -20,11 +20,11 @@ import (
 	"github.com/multica-ai/multica/server/internal/analytics"
 	"github.com/multica-ai/multica/server/internal/auth"
 	"github.com/multica-ai/multica/server/internal/daemonws"
-	"github.com/multica-ai/multica/server/internal/featureflags"
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/middleware"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
+	"github.com/multica-ai/multica/server/internal/secrets"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -1346,14 +1346,33 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 		// deliberately independent of composioMCPEnabled, so a reference
 		// resolves whether or not Composio MCP is on — and placed right
 		// after the MCP merge above so a reference can target a server
-		// the overlay just introduced. Unlike the overlay merge, a
-		// resolution failure does NOT fall back silently: a missing or
-		// undecryptable secret must never let the literal ${secret:NAME}
-		// text (or any other unresolved config) reach the daemon, so the
-		// already-claimed task is failed outright and this claim response
-		// reports no task for this round.
-		if h.Secrets != nil && featureflags.SecretsStoreEnabled(r.Context(), h.FeatureFlags) {
-			resolvedMcpConfig, mcpErr := h.Secrets.ResolveJSON(r.Context(), h.Queries, runtime.WorkspaceID, mcpConfig)
+		// the overlay just introduced. The flag is evaluated with an
+		// EvalContext scoped to the RUNTIME's workspace (review finding 2),
+		// not the requesting user, so a workspace-targeted rollout behaves
+		// identically here and in the API's authorizeSecretsAccess check —
+		// a daemon claim request carries no "user" the way the API does,
+		// so leaving the eval context empty would always miss per-user
+		// targeting rules and silently diverge from the API's decision.
+		secretsStoreAvailable := h.Secrets != nil && secretsStoreEnabledForWorkspace(r.Context(), h.FeatureFlags, runtimeWorkspaceID)
+		if secretsStoreAvailable {
+			// Review finding 1: resolution is scoped to exactly the secrets
+			// granted to the CLAIMING agent (agent_secret), not every
+			// secret in the workspace. Fetched once per claim, only when
+			// resolution is actually going to run.
+			grantedNames, grantErr := h.Queries.GetGrantedSecretNamesForAgent(r.Context(), task.AgentID)
+			if grantErr != nil {
+				slog.Error("daemon claim: load agent secret grants failed", "task_id", uuidToString(task.ID), "agent_id", uuidToString(task.AgentID), "error", grantErr)
+				h.failClaimedTaskForSecretError(r.Context(), task, fmt.Errorf("failed to load secret grants"))
+				outcome = "error_secret_resolution"
+				payloadBytes, _ = writeMeasuredJSON(w, http.StatusOK, map[string]any{"task": nil})
+				return
+			}
+			allowed := make(map[string]struct{}, len(grantedNames))
+			for _, n := range grantedNames {
+				allowed[n] = struct{}{}
+			}
+
+			resolvedMcpConfig, mcpErr := h.Secrets.ResolveJSON(r.Context(), h.Queries, runtime.WorkspaceID, allowed, mcpConfig)
 			if mcpErr != nil {
 				h.failClaimedTaskForSecretError(r.Context(), task, mcpErr)
 				outcome = "error_secret_resolution"
@@ -1362,7 +1381,7 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 			}
 			mcpConfig = resolvedMcpConfig
 
-			resolvedCustomEnv, envErr := h.Secrets.ResolveStringMap(r.Context(), h.Queries, runtime.WorkspaceID, customEnv)
+			resolvedCustomEnv, envErr := h.Secrets.ResolveStringMap(r.Context(), h.Queries, runtime.WorkspaceID, allowed, customEnv)
 			if envErr != nil {
 				h.failClaimedTaskForSecretError(r.Context(), task, envErr)
 				outcome = "error_secret_resolution"
@@ -1370,6 +1389,21 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			customEnv = resolvedCustomEnv
+		} else if secrets.ContainsReference(mcpConfig) || secrets.StringMapContainsReference(customEnv) {
+			// Review finding 2 (fail-open guard): resolution is
+			// unavailable (no master key configured, or the flag is off
+			// for this workspace) but the config carries a literal
+			// ${secret:...} reference anyway — e.g. an operator disabled
+			// the flag or restarted without MULTICA_SECRETS_KEY after
+			// agents were already wired up with references. Sending that
+			// text to the daemon unresolved breaks the "never send the
+			// literal reference" contract just as surely as a failed
+			// resolution would, so this fails the task the same way
+			// instead of claiming it.
+			h.failClaimedTaskForSecretError(r.Context(), task, fmt.Errorf("secret reference present but the secrets store is disabled or unconfigured"))
+			outcome = "error_secret_resolution"
+			payloadBytes, _ = writeMeasuredJSON(w, http.StatusOK, map[string]any{"task": nil})
+			return
 		}
 		// runtime_config is stored as JSONB and may legitimately be the
 		// empty object `{}` for agents that haven't opted into any

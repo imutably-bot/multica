@@ -7,6 +7,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -19,7 +20,21 @@ import (
 	"github.com/multica-ai/multica/server/internal/logger"
 	"github.com/multica-ai/multica/server/internal/secrets"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/featureflag"
 )
+
+// secretsStoreEnabledForWorkspace evaluates the secrets_store flag with an
+// EvalContext scoped to workspaceID (KHI-972 P2 review finding 2), not the
+// calling user. Used by both the API (here) and the claim path
+// (daemon.go) so a workspace-targeted rollout makes the identical
+// decision in both places — evaluating with the request's ambient
+// context (which today carries no EvalContext at all, and even if it did
+// would differ between an admin's API session and a daemon claim
+// request) would let the API appear enabled while claim-time resolution
+// silently stayed off, or vice versa.
+func secretsStoreEnabledForWorkspace(ctx context.Context, flags *featureflag.Service, workspaceID string) bool {
+	return featureflags.SecretsStoreEnabled(featureflag.WithEvalContext(ctx, featureflag.EvalContext{WorkspaceID: workspaceID}), flags)
+}
 
 // secretActivityCreated/Rotated/Deleted are the activity_log `action`
 // constants for the three mutating secret endpoints. Rows are written
@@ -81,7 +96,7 @@ func (h *Handler) authorizeSecretsAccess(w http.ResponseWriter, r *http.Request)
 		return db.Member{}, false
 	}
 	workspaceID := h.resolveWorkspaceID(r)
-	if !featureflags.SecretsStoreEnabled(r.Context(), h.FeatureFlags) {
+	if !secretsStoreEnabledForWorkspace(r.Context(), h.FeatureFlags, workspaceID) {
 		writeError(w, http.StatusServiceUnavailable, "secrets store is not enabled for this workspace")
 		return db.Member{}, false
 	}
