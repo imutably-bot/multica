@@ -20,6 +20,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/logger"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
+	"github.com/multica-ai/multica/server/internal/secrets"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/pkg/agent"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -911,6 +912,10 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		mc = append([]byte(nil), rawMcpConfig...)
 	}
 
+	if rejectUnauthorizedSecretRefs(w, member.Role, mc, req.CustomEnv) {
+		return
+	}
+
 	// composio_toolkit_allowlist: the JSON field is a list-of-slugs that gets
 	// stored as TEXT[]. We normalise here (lowercase + trim + dedupe) so the
 	// dispatch path can compare against per-user connection rows with a
@@ -1213,6 +1218,29 @@ func (h *Handler) canManageAgent(w http.ResponseWriter, r *http.Request, agent d
 	return true
 }
 
+// rejectUnauthorizedSecretRefs is the KHI-972 P2 review finding-1 stopgap:
+// defence in depth alongside the agent_secret grant table, which governs
+// whether a reference actually RESOLVES at claim time. This instead
+// governs who may WRITE one in the first place. canManageAgent lets an
+// agent's owner manage it even as a plain workspace member — that is
+// correct for ordinary agent settings, but a plain member must not be
+// able to wire up ${secret:NAME} references on their own agent at all
+// (whether or not that secret happens to be granted to the agent today —
+// grants can change later, and the agent owner shouldn't get to decide
+// which secrets their agent tries to pull in). Only an owner/admin caller
+// may write a reference. Returns true (and has already written the 403)
+// when the caller must be rejected.
+func rejectUnauthorizedSecretRefs(w http.ResponseWriter, callerRole string, mcpConfig []byte, customEnv map[string]string) bool {
+	if roleAllowed(callerRole, "owner", "admin") {
+		return false
+	}
+	if secrets.ContainsReference(mcpConfig) || secrets.StringMapContainsReference(customEnv) {
+		writeError(w, http.StatusForbidden, "only a workspace owner or admin may save a ${secret:...} reference in mcp_config or custom_env")
+		return true
+	}
+	return false
+}
+
 func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	existing, ok := h.loadAgentForUser(w, r, id)
@@ -1278,6 +1306,23 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 	shouldClearMcpConfig := hasMcpConfig && bytes.Equal(bytes.TrimSpace(rawMcpConfig), []byte("null"))
 	if hasMcpConfig && !shouldClearMcpConfig {
 		params.McpConfig = append([]byte(nil), rawMcpConfig...)
+
+		// KHI-972 P2 review finding 1 stopgap: canManageAgent above let this
+		// request through as the agent's OWNER, who can be a plain
+		// workspace member — custom_env is hard-rejected on this endpoint
+		// a few lines up, but mcp_config has no dedicated audited endpoint,
+		// so the check has to live here. Look up the caller's actual
+		// workspace role (canManageAgent only confirmed "admin OR agent
+		// owner", not which) to decide whether a ${secret:...} reference
+		// may be saved.
+		caller, callerErr := h.getWorkspaceMember(r.Context(), requestUserID(r), uuidToString(existing.WorkspaceID))
+		if callerErr != nil {
+			writeError(w, http.StatusForbidden, "unable to verify workspace role")
+			return
+		}
+		if rejectUnauthorizedSecretRefs(w, caller.Role, params.McpConfig, nil) {
+			return
+		}
 	}
 
 	// Resolve the runtime that will be in force after this update so the

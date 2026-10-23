@@ -13,6 +13,13 @@ const (
 	// The access model exists to gate Composio sharing, so the two ship on the
 	// same switch.
 	ComposioMCPApps = "composio_mcp_apps"
+
+	// SecretsStore gates the KHI-972 P2 encrypted workspace secret store:
+	// the create/list/rotate/delete API, the CLI, and ${secret:NAME}
+	// resolution at task claim time. Off by default. Checked independently
+	// of ComposioMCPApps — secret resolution must apply whether or not
+	// Composio MCP is enabled.
+	SecretsStore = "secrets_store"
 )
 
 var frontendPublicFlags = []string{
@@ -21,6 +28,12 @@ var frontendPublicFlags = []string{
 
 func ComposioMCPAppsEnabled(ctx context.Context, flags *featureflag.Service) bool {
 	return flags.IsEnabled(ctx, ComposioMCPApps, false)
+}
+
+// SecretsStoreEnabled reports whether the KHI-972 P2 secrets store is
+// enabled for the current context.
+func SecretsStoreEnabled(ctx context.Context, flags *featureflag.Service) bool {
+	return flags.IsEnabled(ctx, SecretsStore, false)
 }
 
 func EvaluateFrontendPublicFlags(ctx context.Context, flags *featureflag.Service) map[string]bool {

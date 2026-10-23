@@ -28,6 +28,7 @@ import (
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/middleware"
 	"github.com/multica-ai/multica/server/internal/realtime"
+	"github.com/multica-ai/multica/server/internal/secrets"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/storage"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -165,6 +166,13 @@ type Handler struct {
 	// the composio HTTP handlers return 503 in that case. Wired in
 	// cmd/server/router.go after handler.New.
 	Composio *composio.Service
+	// Secrets is the KHI-972 P2 encrypted workspace secret store. Nil when
+	// MULTICA_SECRETS_KEY is unset or invalid; the secret API handlers
+	// return 503 in that case, and ClaimTaskByRuntime's reference
+	// resolution step is a no-op (feature-flag gated separately — see
+	// featureflags.SecretsStoreEnabled). Wired in cmd/server/router.go
+	// after handler.New.
+	Secrets *secrets.Service
 	// ChannelSupervisor owns the per-installation supervisor goroutines
 	// that hold the §4.4 WS lease and drive each channel.Channel
 	// (MUL-3620 generalized the Feishu-only Hub into this channel-agnostic
